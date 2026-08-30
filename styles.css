@@ -41,3 +41,4 @@ a:focus-visible,button:focus-visible{outline:2px solid #0e63b3;outline-offset:3p
 [data-hv="13"]:hover{background:#f4f3f1;}
 [data-hv="14"]:hover{background:#f4f3f1;}
 [data-hv="15"]:hover{background:#f4f3f1;}
+@media(max-width:640px){.planBtn{padding-right:34px;}}

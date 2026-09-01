@@ -85,11 +85,43 @@
     fechaInput.min = today;
   }
 
+  // ---------- Cupos en tiempo real ----------
+  var CUPOS_API = 'https://script.google.com/macros/s/AKfycbwoIxVXpwzK5aIzoVXqcHUGtwCL1BgFHKHTCzyCsxRQuxY1ZKcKKgOMUPY7NFBx7rCa/exec';
+  var horarioSelect = reservaForm ? reservaForm.elements['horario'] : null;
+  var horarioLabelsBase = {};
+  if (horarioSelect) {
+    Array.prototype.forEach.call(horarioSelect.options, function (opt) {
+      if (opt.value) horarioLabelsBase[opt.value] = opt.textContent;
+    });
+  }
+  function actualizarDisponibilidad(fecha) {
+    if (!horarioSelect || !fecha) return;
+    fetch(CUPOS_API + '?fecha=' + encodeURIComponent(fecha))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.disponibilidad) return;
+        Array.prototype.forEach.call(horarioSelect.options, function (opt) {
+          if (!opt.value) return;
+          var cupos = data.disponibilidad[opt.value];
+          if (typeof cupos !== 'number') return;
+          var base = horarioLabelsBase[opt.value] || opt.value;
+          opt.disabled = cupos <= 0;
+          opt.textContent = cupos <= 0 ? (base + ' — Sin cupo') : (base + ' — ' + cupos + ' cupos');
+          if (cupos <= 0 && horarioSelect.value === opt.value) horarioSelect.value = '';
+        });
+      })
+      .catch(function () {});
+  }
+  if (fechaInput) {
+    fechaInput.addEventListener('change', function () { actualizarDisponibilidad(fechaInput.value); });
+  }
+
   // ---------- Formulario de reserva ----------
   var EMAIL = 'maiporiveradventure@gmail.com';
   var WA = '56976437931';
   var sentMsg = document.getElementById('sentMsg');
   var failedMsg = document.getElementById('failedMsg');
+  var noCupoMsg = document.getElementById('noCupoMsg');
   var emailBtn = document.getElementById('emailFallbackBtn');
   var emailLabel = document.getElementById('emailFallbackLabel');
 
@@ -141,13 +173,41 @@
     if (failedMsg) failedMsg.style.display = 'block';
   }
 
+  function showSinCupo() {
+    if (sentMsg) sentMsg.style.display = 'none';
+    if (failedMsg) failedMsg.style.display = 'none';
+    if (noCupoMsg) noCupoMsg.style.display = 'block';
+  }
+  function reservarCupo(fecha, horario, personas) {
+    return fetch(CUPOS_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ fecha: fecha, horario: horario, personas: Number(personas) || 1 })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res && res.error === 'sin_cupo') {
+          showSinCupo();
+          actualizarDisponibilidad(fecha);
+          return false;
+        }
+        return true;
+      })
+      .catch(function () { return true; });
+  }
+
   if (reservaForm) {
     reservaForm.addEventListener('submit', function (e) {
       e.preventDefault();
       if (!valid()) return;
-      window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent(buildText()), '_blank');
-      showSent();
-      postEmail().catch(function () {});
+      var d = fields();
+      if (noCupoMsg) noCupoMsg.style.display = 'none';
+      reservarCupo(d.fecha, d.horario, d.personas).then(function (ok) {
+        if (!ok) return;
+        window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent(buildText()), '_blank');
+        showSent();
+        postEmail().catch(function () {});
+      });
     });
   }
 

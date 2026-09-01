@@ -158,6 +158,34 @@
     fechaInput.addEventListener('change', function () { actualizarDisponibilidad(fechaInput.value); });
   }
 
+  // ---------- Cupos disponibles hoy ----------
+  var cuposHoyWidget = document.getElementById('cuposHoyWidget');
+  var cuposHoyList = document.getElementById('cuposHoyList');
+  if (cuposHoyWidget && cuposHoyList) {
+    var th = new Date();
+    var hoyStr = th.getFullYear() + '-' + String(th.getMonth() + 1).padStart(2, '0') + '-' + String(th.getDate()).padStart(2, '0');
+    fetch(CUPOS_API + '?fecha=' + encodeURIComponent(hoyStr))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.disponibilidad) return;
+        var horarios = ['11:00', '14:00', '17:00'];
+        var html = '';
+        horarios.forEach(function (h) {
+          var cupos = data.disponibilidad[h];
+          if (typeof cupos !== 'number') return;
+          var color = cupos > 0 ? '#25D366' : '#e05555';
+          html += '<div style="display:flex;justify-content:space-between;gap:14px;"><span>' + h + ' hrs</span><span style="color:' + color + ';font-weight:800;">' +
+            '<span class="lang-es">' + (cupos > 0 ? cupos + ' cupos' : 'Sin cupo') + '</span>' +
+            '<span class="lang-en">' + (cupos > 0 ? cupos + ' spots' : 'Full') + '</span></span></div>';
+        });
+        if (html) {
+          cuposHoyList.innerHTML = html;
+          cuposHoyWidget.style.display = 'block';
+        }
+      })
+      .catch(function () {});
+  }
+
   // ---------- Formulario de reserva ----------
   var EMAIL = 'maiporiveradventure@gmail.com';
   var WA = '56976437931';

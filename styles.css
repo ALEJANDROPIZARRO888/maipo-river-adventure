@@ -18,7 +18,7 @@ a:focus-visible,button:focus-visible{outline:2px solid #0e63b3;outline-offset:3p
 [data-lang="en"] .langbtn.en{background:#16181d;color:#fff;}
 @keyframes kb{from{transform:scale(1.09)}to{transform:scale(1)}}
 .nav-links{display:none!important;}.nav-ham{display:inline-flex!important;}
-.acc-section{display:none;}.acc-section{scroll-margin-top:84px;}
+.acc-section{display:none;}#planes{display:block;}.acc-section{scroll-margin-top:84px;}
 .nav-links a{padding-bottom:3px;border-bottom:3px solid transparent;}
 .nav-links a:hover{color:#0e63b3;}
 [data-active="planes"] .nav-links a[href="#planes"],[data-active="kayak"] .nav-links a[href="#kayak"],[data-active="como"] .nav-links a[href="#como"],[data-active="seguridad"] .nav-links a[href="#seguridad"],[data-active="nosotros"] .nav-links a[href="#nosotros"],[data-active="galeria"] .nav-links a[href="#galeria"],[data-active="faq"] .nav-links a[href="#faq"],[data-active="ubicacion"] .nav-links a[href="#ubicacion"]{border-bottom-color:#f59200;color:#0e63b3;}

@@ -46,13 +46,20 @@
     target.style.display = 'block';
     target.open = true;
   }
-  function scrollToSection(target) {
-    var tries = 0;
-    (function step() {
-      target.scrollIntoView({ behavior: tries === 0 ? 'auto' : 'smooth', block: 'start' });
-      tries++;
-      if (tries < 5) setTimeout(step, 150);
-    })();
+  function scrollToSectionWhenReady(target) {
+    function jump() { target.scrollIntoView({ behavior: 'auto', block: 'start' }); }
+    var imgs = target.querySelectorAll('img');
+    var pending = 0;
+    Array.prototype.forEach.call(imgs, function (img) {
+      if (!img.complete) {
+        pending++;
+        var done = function () { pending--; if (pending <= 0) jump(); };
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+      }
+    });
+    jump();
+    [100, 250, 450, 700, 1000].forEach(function (delay) { setTimeout(jump, delay); });
   }
   document.addEventListener('click', function (e) {
     var link = e.target.closest('a[href^="#"]');
@@ -65,7 +72,7 @@
       if (navHam) navHam.setAttribute('aria-expanded', 'false');
     }
     revealSection(target);
-    setTimeout(function () { scrollToSection(target); }, 30);
+    scrollToSectionWhenReady(target);
   });
   if (location.hash) {
     var initialTarget = document.getElementById(location.hash.slice(1));

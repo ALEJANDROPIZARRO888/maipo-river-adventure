@@ -40,6 +40,36 @@
     });
   }
 
+  // ---------- Abrir secciones colapsadas desde el menú ----------
+  function revealSection(target) {
+    if (!target) return;
+    target.style.display = '';
+    target.open = true;
+    requestAnimationFrame(function () {
+      var y = target.getBoundingClientRect().top + window.pageYOffset - 70;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var link = e.target.closest('a[href^="#"]');
+    if (!link) return;
+    var target = document.getElementById(link.getAttribute('href').slice(1));
+    if (!target || !target.classList.contains('acc-section')) return;
+    e.preventDefault();
+    revealSection(target);
+    if (mobileMenu) {
+      mobileMenu.style.display = 'none';
+      if (navHam) navHam.setAttribute('aria-expanded', 'false');
+    }
+  });
+  if (location.hash) {
+    var initialTarget = document.getElementById(location.hash.slice(1));
+    if (initialTarget && initialTarget.classList.contains('acc-section')) {
+      initialTarget.style.display = '';
+      initialTarget.open = true;
+    }
+  }
+
   // ---------- Scroll spy (sección activa en el nav) ----------
   var sectionIds = ['planes', 'kayak', 'como', 'seguridad', 'nosotros', 'galeria', 'faq', 'ubicacion'];
   var sections = sectionIds.map(function (id) { return document.getElementById(id); }).filter(Boolean);

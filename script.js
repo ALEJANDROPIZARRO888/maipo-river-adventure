@@ -79,6 +79,7 @@
     if (initialTarget && initialTarget.classList.contains('acc-section')) {
       initialTarget.style.display = 'block';
       initialTarget.open = true;
+      scrollToSectionWhenReady(initialTarget);
     }
   }
 

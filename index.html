@@ -69,7 +69,7 @@
         <button class="langbtn en" style="background:transparent;color:#16181d;border:none;padding:7px 11px;font-weight:800;font-size:12px;letter-spacing:.05em;cursor:pointer;border-left:2px solid #16181d;">EN</button>
       </div>
       <a href="#reserva" style="display:inline-flex;align-items:center;gap:8px;background:#f59200;color:#16181d;font-weight:800;font-size:13.5px;letter-spacing:.03em;text-transform:uppercase;padding:11px 18px;border:2px solid #f59200;" data-hv="1"><span class="lang-es">Reservar</span><span class="lang-en">Book</span></a>
-      <button class="nav-ham" aria-label="Menú" aria-expanded="false" id="navHam" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#f59200;color:#16181d;font-weight:800;font-size:13.5px;letter-spacing:.03em;text-transform:uppercase;padding:11px 16px;border:2px solid #f59200;cursor:pointer;">
+      <button class="nav-ham" aria-label="Menú" aria-expanded="false" id="navHam" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;color:#16181d;font-weight:800;font-size:13.5px;letter-spacing:.03em;text-transform:uppercase;padding:11px 16px;border:2px solid #16181d;cursor:pointer;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16181d" stroke-width="2.5" stroke-linecap="square"><path d="M3 6h18M3 12h18M3 18h18"></path></svg>
         <span class="lang-es">Menú</span><span class="lang-en">Menu</span>
       </button>
@@ -135,6 +135,13 @@
           <span style="width:44px;height:44px;background:#f59200;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16181d" stroke-width="2" stroke-linecap="square"><rect x="2" y="2" width="20" height="20" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1" fill="#16181d" stroke="none"></circle></svg></span>
           @maiporiveradventure
         </a>
+      </div>
+      <div id="cuposHoyWidget" style="display:none;margin-top:24px;background:#1e2129;border:2px solid #f59200;padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="width:8px;height:8px;background:#25D366;display:inline-block;flex-shrink:0;"></span>
+          <span style="font-weight:800;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#f59200;"><span class="lang-es">Cupos disponibles hoy</span><span class="lang-en">Spots available today</span></span>
+        </div>
+        <div id="cuposHoyList" style="display:flex;flex-direction:column;gap:5px;color:#e8e6e2;font-size:14px;font-weight:600;"></div>
       </div>
     </div>
 
@@ -247,7 +254,7 @@
   </div>
 </section>
 
-<details id="planes" class="acc-section">
+<details id="planes" class="acc-section" open>
 <summary class="acc-summary"><span class="acc-summary-label"><span class="lang-es">Planes</span><span class="lang-en">Trips</span></span><span class="acc-icon" aria-hidden="true">+</span></summary>
 <section style="max-width:1280px;margin:0 auto;width:100%;padding:clamp(64px,9vw,112px) clamp(16px,4vw,32px);">
   <div style="display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#0e63b3;margin-bottom:14px;"><span style="width:12px;height:12px;background:#f59200;display:inline-block;"></span><span class="lang-es">Nuestros planes</span><span class="lang-en">Our trips</span></div>
@@ -316,6 +323,27 @@
   <p style="margin:28px 0 0;color:#6a6862;font-size:14.5px;font-weight:600;"><span class="lang-es">Horarios disponibles: mañana · medio día · tarde. Precios por persona en pesos chilenos. Consulta por descuentos para grupos.</span><span class="lang-en">Available times: morning · midday · afternoon. Prices per person in Chilean pesos. Ask about group discounts.</span></p>
 </section>
 </details>
+
+<section id="resenas" style="background:#f4f3f1;border-top:2px solid #16181d;">
+  <div style="max-width:1280px;margin:0 auto;width:100%;padding:clamp(56px,8vw,96px) clamp(16px,4vw,32px);">
+    <div style="display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#0e63b3;margin-bottom:14px;"><span style="width:12px;height:12px;background:#f59200;display:inline-block;"></span><span class="lang-es">Lo que dicen</span><span class="lang-en">What people say</span></div>
+    <h2 style="font-size:clamp(28px,4vw,44px);font-weight:900;font-style:italic;line-height:1;letter-spacing:-.01em;text-transform:uppercase;margin:0 0 28px;text-wrap:balance;"><span class="lang-es">Reseñas de clientes</span><span class="lang-en">Customer reviews</span></h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;">
+      <div style="background:#fff;border:2px dashed #c9c5be;padding:24px;display:flex;flex-direction:column;gap:12px;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9c5be" stroke-width="2"><path d="M7 8c-2 0-3 1.6-3 4.2s1 4.2 3 4.2h1.2v-4.2H6.6c0-1.1.5-2.1 1.4-2.6V8Zm10 0c-2 0-3 1.6-3 4.2s1 4.2 3 4.2h1.2v-4.2h-1.6c0-1.1.5-2.1 1.4-2.6V8Z"></path></svg>
+        <p style="margin:0;color:#8a877f;font-size:14px;font-style:italic;line-height:1.5;"><span class="lang-es">Espacio para una reseña real de un cliente — la sumamos desde Google o Instagram.</span><span class="lang-en">Space for a real customer review — we'll add it from Google or Instagram.</span></p>
+      </div>
+      <div style="background:#fff;border:2px dashed #c9c5be;padding:24px;display:flex;flex-direction:column;gap:12px;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9c5be" stroke-width="2"><path d="M7 8c-2 0-3 1.6-3 4.2s1 4.2 3 4.2h1.2v-4.2H6.6c0-1.1.5-2.1 1.4-2.6V8Zm10 0c-2 0-3 1.6-3 4.2s1 4.2 3 4.2h1.2v-4.2h-1.6c0-1.1.5-2.1 1.4-2.6V8Z"></path></svg>
+        <p style="margin:0;color:#8a877f;font-size:14px;font-style:italic;line-height:1.5;"><span class="lang-es">Espacio para una reseña real de un cliente — la sumamos desde Google o Instagram.</span><span class="lang-en">Space for a real customer review — we'll add it from Google or Instagram.</span></p>
+      </div>
+      <div style="background:#fff;border:2px dashed #c9c5be;padding:24px;display:flex;flex-direction:column;gap:12px;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9c5be" stroke-width="2"><path d="M7 8c-2 0-3 1.6-3 4.2s1 4.2 3 4.2h1.2v-4.2H6.6c0-1.1.5-2.1 1.4-2.6V8Zm10 0c-2 0-3 1.6-3 4.2s1 4.2 3 4.2h1.2v-4.2h-1.6c0-1.1.5-2.1 1.4-2.6V8Z"></path></svg>
+        <p style="margin:0;color:#8a877f;font-size:14px;font-style:italic;line-height:1.5;"><span class="lang-es">Espacio para una reseña real de un cliente — la sumamos desde Google o Instagram.</span><span class="lang-en">Space for a real customer review — we'll add it from Google or Instagram.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <details id="kayak" class="acc-section">
 <summary class="acc-summary"><span class="acc-summary-label"><span class="lang-es">Kayak</span><span class="lang-en">Kayak</span></span><span class="acc-icon" aria-hidden="true">+</span></summary>

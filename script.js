@@ -43,7 +43,7 @@
   // ---------- Abrir secciones colapsadas desde el menú ----------
   function revealSection(target) {
     if (!target) return;
-    target.style.display = '';
+    target.style.display = 'block';
     target.open = true;
     requestAnimationFrame(function () {
       var y = target.getBoundingClientRect().top + window.pageYOffset - 70;
@@ -65,7 +65,7 @@
   if (location.hash) {
     var initialTarget = document.getElementById(location.hash.slice(1));
     if (initialTarget && initialTarget.classList.contains('acc-section')) {
-      initialTarget.style.display = '';
+      initialTarget.style.display = 'block';
       initialTarget.open = true;
     }
   }

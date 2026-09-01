@@ -45,10 +45,14 @@
     if (!target) return;
     target.style.display = 'block';
     target.open = true;
-    requestAnimationFrame(function () {
-      var y = target.getBoundingClientRect().top + window.pageYOffset - 70;
-      window.scrollTo({ top: y, behavior: 'smooth' });
-    });
+  }
+  function scrollToSection(target) {
+    var tries = 0;
+    (function step() {
+      target.scrollIntoView({ behavior: tries === 0 ? 'auto' : 'smooth', block: 'start' });
+      tries++;
+      if (tries < 5) setTimeout(step, 150);
+    })();
   }
   document.addEventListener('click', function (e) {
     var link = e.target.closest('a[href^="#"]');
@@ -56,11 +60,12 @@
     var target = document.getElementById(link.getAttribute('href').slice(1));
     if (!target || !target.classList.contains('acc-section')) return;
     e.preventDefault();
-    revealSection(target);
     if (mobileMenu) {
       mobileMenu.style.display = 'none';
       if (navHam) navHam.setAttribute('aria-expanded', 'false');
     }
+    revealSection(target);
+    setTimeout(function () { scrollToSection(target); }, 30);
   });
   if (location.hash) {
     var initialTarget = document.getElementById(location.hash.slice(1));

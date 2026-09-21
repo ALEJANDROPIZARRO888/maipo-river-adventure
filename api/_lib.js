@@ -181,7 +181,7 @@ const APPS_SCRIPT_URL = () => process.env.APPS_SCRIPT_URL ||
   'https://script.google.com/macros/s/AKfycbwoIxVXpwzK5aIzoVXqcHUGtwCL1BgFHKHTCzyCsxRQuxY1ZKcKKgOMUPY7NFBx7rCa/exec';
 
 export async function syncCupos(fecha, horario, delta) {
-  const key = process.env.SHEET_SYNC_KEY;
+  const key = (process.env.SHEET_SYNC_KEY || '').trim();
   if (!key || !delta) return false;
   try {
     const r = await fetch(APPS_SCRIPT_URL(), {
@@ -190,7 +190,9 @@ export async function syncCupos(fecha, horario, delta) {
       body: JSON.stringify({ action: 'ajustar', key, fecha: String(fecha).slice(0, 10), horario, delta }),
       redirect: 'follow'
     });
-    const j = await r.json();
+    const t = await r.text();
+    let j = {}; try { j = JSON.parse(t); } catch {}
+    if (j.ok !== true) console.error('syncCupos rechazado', r.status, t.slice(0, 200));
     return j.ok === true;
   } catch (e) {
     console.error('syncCupos error', e);

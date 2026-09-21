@@ -24,14 +24,39 @@ export default async function handler(req, res) {
       const b = await body(req);
       const ok = ['nueva', 'confirmada', 'cancelada', 'completada'];
       if (!b.id || !ok.includes(b.estado)) return res.status(400).json({ error: 'datos inválidos' });
-      const [antes] = await q`select estado, fecha::text as fecha, horario, personas, cupo_sync from reservas where id = ${b.id}`;
+      const [antes] = await q`select estado, fecha::text as fecha, horario, personas, cupo_sync, nombre, correo, token, origen from reservas where id = ${b.id}`;
       if (!antes) return res.status(404).json({ error: 'no existe' });
       await q`update reservas set estado = ${b.estado} where id = ${b.id}`;
       let planilla = null; // null = no aplica
       if (antes.cupo_sync && (antes.estado === 'cancelada') !== (b.estado === 'cancelada')) {
         planilla = await syncCupos(antes.fecha, antes.horario, b.estado === 'cancelada' ? -antes.personas : antes.personas);
       }
-      return res.status(200).json({ ok: true, planilla });
+      // Correo automático al cliente cuando una reserva de la web pasa a confirmada
+      let correoEnviado = null;
+      if (antes.estado === 'nueva' && b.estado === 'confirmada' && antes.origen === 'web' && /^\S+@\S+\.\S+$/.test(antes.correo)) {
+        const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
+        const fichaUrl = `${base}/fichapasajero?r=${antes.token}`;
+        const n = esc(antes.nombre);
+        const btn = (href, txt) => `<p style="margin:16px 0"><a href="${href}" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">${txt}</a></p>`;
+        const admin = process.env.ADMIN_EMAIL || 'maiporiveradventure@gmail.com';
+        const r = await Promise.allSettled([sendMail({
+          to: antes.correo,
+          replyTo: admin,
+          subject: 'Reserva confirmada / Booking confirmed — Maipo River Adventure',
+          html: emailShell(`<h2 style="margin:8px 0">Hola ${n}, tu reserva está confirmada</h2>
+            <p style="margin:14px 0 4px"><b>${fmtFecha(antes.fecha, 'es')}</b> · ${esc(antes.horario)} hrs<br>${antes.personas} ${antes.personas === 1 ? 'persona' : 'personas'}</p>
+            <p>Llega 20 minutos antes a nuestra base en San Alfonso. Para agilizar el día, <b>cada pasajero</b> debe completar su ficha de seguridad:</p>
+            ${btn(fichaUrl, 'Completar ficha de seguridad')}
+            <hr style="border:0;border-top:1px solid #c9ccd0;margin:20px 0">
+            <h2 style="margin:8px 0">Hi ${n}, your booking is confirmed</h2>
+            <p style="margin:14px 0 4px"><b>${fmtFecha(antes.fecha, 'en')}</b> · ${esc(antes.horario)}<br>${antes.personas} ${antes.personas === 1 ? 'person' : 'people'}</p>
+            <p>Arrive 20 minutes early at our base in San Alfonso. To speed things up, <b>every passenger</b> must fill in the safety form:</p>
+            ${btn(fichaUrl, 'Fill in the safety form')}
+            <p style="font-size:13px;color:#5b6167">WhatsApp: <a href="https://wa.me/56976437931">+56 9 7643 7931</a></p>`)
+        })]);
+        correoEnviado = r[0].status === 'fulfilled';
+      }
+      return res.status(200).json({ ok: true, planilla, correo: correoEnviado });
     }
 
     // ---- Admin: reserva manual (teléfono, WhatsApp, presencial) — ocupa cupos en la planilla
@@ -55,7 +80,7 @@ export default async function handler(req, res) {
         returning id`;
       const planilla = await syncCupos(fecha, hora, personas);
       const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
-      const fichaUrl = `${base}/ficha?r=${token}`;
+      const fichaUrl = `${base}/fichapasajero?r=${token}`;
 
       // Correos: al cliente (si dejaron correo) y copia al administrador
       const btn = (href, txt) => `<p style="margin:16px 0"><a href="${href}" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">${txt}</a></p>`;
@@ -129,7 +154,7 @@ export default async function handler(req, res) {
       returning id`;
 
     const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
-    const fichaUrl = `${base}/ficha?r=${token}`;
+    const fichaUrl = `${base}/fichapasajero?r=${token}`;
 
     // Avisos: no bloquean la respuesta si fallan
     const nombreH = esc(nombre), planH = esc(plan);

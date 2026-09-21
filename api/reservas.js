@@ -164,6 +164,8 @@ export default async function handler(req, res) {
     const btn = (href, txt) => `<p style="margin:16px 0"><a href="${href}" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">${txt}</a></p>`;
 
     await Promise.allSettled([
+      // Aviso al celular de los admin (app del equipo). Aislado: si falla o la app no está instalada, la reserva no se entera.
+      import('./_notif.js').then(m => m.reservaNueva({ nombre, personas, fecha, horario: hora, plan })).catch(() => {}),
       sendMail({
         to: process.env.ADMIN_EMAIL || 'maiporiveradventure@gmail.com',
         replyTo: correo,

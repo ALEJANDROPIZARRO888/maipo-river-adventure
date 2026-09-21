@@ -52,8 +52,21 @@ export function ensureApp() {
         tipo text not null,
         titulo text not null,
         cuerpo text,
+        ruta text,
         ref_id int,
         leido boolean not null default false
+      )`,
+      q`alter table avisos add column if not exists ruta text`,
+      q`create index if not exists avisos_cuenta on avisos (cuenta_id, id desc)`,
+      // Un teléfono que activó los avisos = una suscripción (dirección del servicio de push del navegador + llaves).
+      q`create table if not exists push_subs (
+        id serial primary key,
+        creada timestamptz not null default now(),
+        cuenta_id int not null references cuentas(id) on delete cascade,
+        endpoint text not null unique,
+        p256dh text not null,
+        auth text not null,
+        ua text
       )`,
       q`create table if not exists login_intentos (id serial primary key, clave text not null, creada timestamptz not null default now())`,
       q`create index if not exists login_intentos_clave on login_intentos (clave, creada)`,

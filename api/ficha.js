@@ -187,6 +187,8 @@ export default async function handler(req, res) {
       <p style="margin:16px 0"><a href="${base}/admin" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">Abrir panel</a></p>`;
 
     await Promise.allSettled([
+      // Aviso al celular de los admin cuando la última ficha de una reserva queda lista (app del equipo). Aislado del flujo del cliente.
+      r && total === r.personas ? import('./_notif.js').then(m => m.fichasCompletas({ titular: r.nombre, total, personas: r.personas, fecha: r.fecha, horario: r.horario })).catch(() => {}) : null,
       sendMail({
         to: correo,
         replyTo: admin,

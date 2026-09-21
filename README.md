@@ -14,9 +14,11 @@ Sitio web (rafting en el Cajón del Maipo) más el backend de operación: reserv
 | `api/_lib.js` | Base de datos (Neon Postgres), correo (Gmail o Resend), formatos y utilidades. Crea las tablas solo. |
 | `fichapasajero/index.html` | Ficha pública ES/EN a la que se llega con el QR: `/fichapasajero?r=TOKEN` (`/ficha` redirige aquí). |
 | `admin/index.html` | Panel `/admin`: reservas, cupos, **salidas** (reparto en balsas), fichas, link de ficha y envío por WhatsApp. |
-| `app/` | **App del equipo** (`/app`), instalable en el celular: `index.html`, `manifest.webmanifest`, `sw.js` e íconos. |
+| `app/` | **App del equipo** (`/app`), instalable en el celular: `index.html`, `app.js`, `app.css`, `manifest.webmanifest`, `sw.js` (funciona sin señal y recibe los avisos) e íconos. |
 | `api/app.js` | API de la app: login, armado y publicación de bajadas, turnos, avisos, equipo y pagos. |
 | `api/_auth.js` | Cuentas, sesiones firmadas, límite de intentos y el contador de cambios para el tiempo real. |
+| `api/_notif.js` | Un aviso = una fila en el centro de avisos + un push al celular, con enlace a la pantalla que corresponde. |
+| `api/_push.js` | Web Push: llaves VAPID (se generan solas), suscripciones de cada teléfono y envío. |
 | `api/_auto.js` | Reglas puras de operación: tarifas, auto-distribución de pasajeros, elección de personal y choques de horario. |
 
 ## Salidas (bajadas)
@@ -37,7 +39,12 @@ Una sola app con dos áreas según el tipo de cuenta. Se instala desde el navega
 - **Admin:** inicio con avisos, **Armar** (auto-distribuir pasajeros en balsas y personal, asignar a mano, publicar), reservas, equipo y pagos. Publicar exige una cuenta admin verificada y una guía en cada balsa que sale; lo demás pide confirmación.
 - **Trabajador:** solicitudes de bajada (aceptar / no puedo), agenda, vista del turno según su función (guía ve a los pasajeros de su balsa con emergencia y datos médicos; kayak ve las balsas que cubre; conductor ve el manifiesto de traslado), cierre de bajada y pagos. Solo cuentan las bajadas cerradas; lo demás es estimado. La tarifa se congela al publicar (guía y kayak $35.000, conductor $20.000; sección completa ×2).
 - **Tiempo real:** cada cambio en la base (incluidas las reservas y fichas que llegan desde la web pública) sube un contador (`app_rev`, mantenido por triggers). Cada teléfono lo consulta cada 3 segundos y se actualiza solo cuando cambia. Sin señal, la app muestra lo último que vio; guardar cambios exige conexión.
-- **Aún no incluye:** fotos y videos (Mercado Pago), caudal DGA, WhatsApp Business, notificaciones push con la app cerrada, PDF del consentimiento, registro propio de trabajadores y cola de cambios sin señal.
+- **Avisos al celular (push):** cada persona los activa una vez desde la app ("Activar avisos"). Llegan aunque la app esté cerrada y al tocarlos abren la pantalla que corresponde. Cada teléfono queda ligado a una sola cuenta y se desvincula al cerrar sesión. En Perfil hay un botón "Probar avisos".
+  - **Admin recibe:** reserva nueva de la web, fichas completas de una reserva, y cuando un trabajador acepta, rechaza (con reemplazo sugerido) o cierra su turno.
+  - **Trabajador recibe:** solicitud de bajada (con función, tramo y monto), aviso si lo sacan de una bajada, y cuando le pagan.
+  - **iPhone:** los avisos solo funcionan con la app instalada en la pantalla de inicio (iOS 16.4 o superior).
+  - **Técnica:** librería `web-push`; las llaves VAPID se guardan en la tabla `config` (no hay que configurar nada). Solo se aceptan direcciones de los servicios de push de Chrome, Firefox, Safari y Edge. Si el envío falla, la operación (publicar, aceptar, reservar…) sigue igual y el aviso queda en el centro de avisos de la app.
+- **Aún no incluye:** fotos y videos (Mercado Pago), caudal DGA, WhatsApp Business, recordatorios programados, PDF del consentimiento, registro propio de trabajadores y cola de cambios sin señal.
 
 ## Pruebas
 

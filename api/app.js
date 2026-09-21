@@ -2,6 +2,8 @@ import { db, cors, body, clientIp, sendMail, esc, isAdmin, emailShell, clp, fmtF
 import { ensureApp, cuentaDe, firmar, hashClave, claveOk, claveTemporal, bloqueado, registrarFallo, limpiarFallos, usuarioLibre, hoyCL } from './_auth.js';
 import { materializar, salidasDe, TRAMOS } from './_bajadas.js';
 import { tarifa, puestosDe, distribuirFichas, elegirPersonal, choque, resumenPago, balsasNecesarias, FUNCIONES, NOMBRE_FUNCION } from './_auto.js';
+import { notificar } from './_notif.js';
+import { vapid, suscripcionValida, guardarSuscripcion, borrarSuscripcion, enviarPush } from './_push.js';
 
 // API de la app del personal. Un solo endpoint: GET ?a=<consulta> y POST {accion, ...}. Todo (salvo instalar e iniciar sesión)
 // exige la sesión de una cuenta; los admin ven todo lo operacional y cada trabajador solo lo suyo.
@@ -20,12 +22,6 @@ const soloAdmin = yo => { if (yo.tipo !== 'admin') throw new Fallo(403, 'Solo pa
 const soloTrabajador = yo => { if (yo.tipo !== 'trabajador') throw new Fallo(403, 'Solo para cuentas de trabajador.'); };
 const funcionesOk = f => Array.isArray(f) && f.length > 0 && f.every(x => FUNCIONES.includes(x));
 
-async function avisarAdmins(q, tipo, titulo, cuerpo, ref) {
-  await q`insert into avisos (cuenta_id, tipo, titulo, cuerpo, ref_id) select id, ${tipo}::text, ${titulo}::text, ${cuerpo}::text, ${ref}::int from cuentas where tipo = 'admin' and activa`;
-}
-async function avisar(q, cuenta, tipo, titulo, cuerpo, ref) {
-  await q`insert into avisos (cuenta_id, tipo, titulo, cuerpo, ref_id) values (${cuenta}, ${tipo}, ${titulo}, ${cuerpo}, ${ref})`;
-}
 // Cuántas bajadas lleva cada trabajador (para repartir con equidad).
 async function cargas(q) {
   const rows = await q`select trabajador_id, count(*)::int as n from turnos where estado in ('asignado', 'aceptado', 'cerrado', 'pagado') group by trabajador_id`;
@@ -81,8 +77,9 @@ async function login({ q, b, req }) {
 async function rev({ q }) { const [r] = await q`select last_value::int as rev from app_rev`; return r; }
 
 async function yoInfo({ q, yo }) {
-  const [a] = await q`select count(*)::int as n from avisos where cuenta_id = ${yo.id} and not leido`;
-  return { cuenta: publica(yo), avisos: a.n, hoy: hoyCL(), ...(await rev({ q })) };
+  const [a] = await q`select (select count(*)::int from avisos where cuenta_id = ${yo.id} and not leido) as sin_leer,
+    (select count(*)::int from push_subs where cuenta_id = ${yo.id}) as telefonos`;
+  return { cuenta: publica(yo), avisos: a.sin_leer, telefonos: a.telefonos, hoy: hoyCL(), ...(await rev({ q })) };
 }
 
 async function dia({ q, yo, query }) {
@@ -157,7 +154,7 @@ async function turno({ q, yo, query }) {
 }
 
 async function avisosDe({ q, yo }) {
-  return { avisos: await q`select id, tipo, titulo, cuerpo, ref_id, leido, creada from avisos where cuenta_id = ${yo.id} order by id desc limit 50` };
+  return { avisos: await q`select id, tipo, titulo, cuerpo, ruta, ref_id, leido, creada from avisos where cuenta_id = ${yo.id} order by id desc limit 50` };
 }
 
 async function equipo({ q, yo }) {
@@ -211,7 +208,7 @@ async function asignar({ q, yo, b }) {
   if (ops.length) await q.transaction(ops);
   // Si la persona reemplazada ya tenía la solicitud, se le avisa que ya no va.
   if (actual && ['asignado', 'aceptado'].includes(actual.estado) && String(actual.trabajador_id) !== String(b.trabajador_id))
-    await avisar(q, actual.trabajador_id, 'cancelado', `Ya no estás en la bajada de las ${bj.horario}`, `${fechaCorta(bj.fecha)} · el administrador cambió el equipo.`, bj.id);
+    await notificar(q, actual.trabajador_id, { tipo: 'cancelado', titulo: `Ya no estás en la bajada de las ${bj.horario}`, cuerpo: `${fechaCorta(bj.fecha)} · el administrador cambió el equipo.`, ruta: 'agenda', ref: bj.id });
   return { ok: true };
 }
 
@@ -272,19 +269,22 @@ async function publicar({ q, yo, b }) {
   if (puestos.some(p => p.funcion === 'conductor' && falta(p))) avisos.push('Falta conductor / fotógrafo.');
   if (avisos.length && !b.forzar) throw new Fallo(409, 'Hay cosas por revisar antes de avisar al equipo.', { avisos, requiereConfirmar: true });
 
+  // Se "reclaman" los borradores en una sola sentencia: si el admin toca el botón dos veces, solo una de las dos
+  // publicaciones recibe filas de vuelta y el equipo no recibe la solicitud repetida.
   const g = tarifa('guia', bj.tramo), s = tarifa('seguridad', bj.tramo), c = tarifa('conductor', bj.tramo);
-  await q.transaction([
+  const [reclamados] = await q.transaction([
     q`update turnos set estado = 'asignado', tarifa = case funcion when 'guia' then ${g}::int when 'seguridad' then ${s}::int else ${c}::int end
-      where bajada_id = ${bj.id} and estado = 'borrador'`,
+      where bajada_id = ${bj.id} and estado = 'borrador' returning id, trabajador_id, funcion, puesto, tarifa`,
     q`update bajadas set estado = 'publicada', publicada_por = ${yo.id}, publicada_en = coalesce(publicada_en, now()) where id = ${bj.id}`
   ]);
-  for (const t of pendientes) {
+  await Promise.all(reclamados.map(t => {
     const p = puestos.find(x => x.puesto === t.puesto);
-    const [w] = await q`select trabajador_id, tarifa from turnos where id = ${t.id}`;
-    await avisar(q, w.trabajador_id, 'solicitud', `Nueva bajada · ${bj.horario}`,
-      `${fechaCorta(bj.fecha)} · ${NOMBRE_FUNCION[t.funcion]} (${p ? p.etiqueta : ''}) · ${TRAMOS[bj.tramo] || 'tramo por confirmar'} · ${clp(w.tarifa)}`, t.id);
-  }
-  return { ok: true, enviados: pendientes.length };
+    return notificar(q, t.trabajador_id, {
+      tipo: 'solicitud', titulo: `Nueva bajada · ${bj.horario}`, ruta: 'turno:' + t.id, ref: t.id,
+      cuerpo: `${fechaCorta(bj.fecha)} · ${NOMBRE_FUNCION[t.funcion]} (${p ? p.etiqueta : ''}) · ${TRAMOS[bj.tramo] || 'tramo por confirmar'} · ${clp(t.tarifa)}`
+    });
+  }));
+  return { ok: true, enviados: reclamados.length };
 }
 
 async function responder({ q, yo, b }) {
@@ -297,21 +297,26 @@ async function responder({ q, yo, b }) {
   if (b.respuesta === 'aceptar') {
     const motivo = choque(yo.id, { id: t.bajada_id, tramo: t.tramo }, await turnosDelDia(q, t.fecha, ['aceptado', 'cerrado', 'pagado']));
     if (motivo) throw new Fallo(409, motivo);
-    await q`update turnos set estado = 'aceptado', respondido_en = now() where id = ${id}`;
-    await avisarAdmins(q, 'aceptado', `${quien} aceptó la bajada de ${t.horario}`, `${NOMBRE_FUNCION[t.funcion]} · ${cuando}`, t.bajada_id);
+    // Condicional: si la persona toca "Aceptar" dos veces, solo la primera cambia el estado y avisa al admin.
+    const ganado = await q`update turnos set estado = 'aceptado', respondido_en = now() where id = ${id} and estado = 'asignado' returning id`;
+    if (!ganado.length) throw new Fallo(409, 'Este turno ya fue respondido.');
+    await notificar(q, 'admins', { tipo: 'aceptado', titulo: `${quien} aceptó la bajada de ${t.horario}`, cuerpo: `${NOMBRE_FUNCION[t.funcion]} · ${cuando}`, ruta: 'armar:' + t.fecha, ref: t.bajada_id });
     return { ok: true, estado: 'aceptado' };
   }
   if (b.respuesta !== 'rechazar') throw new Fallo(400, 'Respuesta inválida.');
   const mot = clip(b.motivo, 300) || null;
-  await q`update turnos set estado = 'rechazado', respondido_en = now(), motivo_rechazo = ${mot} where id = ${id}`;
+  const ganado = await q`update turnos set estado = 'rechazado', respondido_en = now(), motivo_rechazo = ${mot} where id = ${id} and estado = 'asignado' returning id`;
+  if (!ganado.length) throw new Fallo(409, 'Este turno ya fue respondido.');
   // Reemplazo sugerido: quienes declaran la función, sin choque y con menos bajadas.
   const carga = await cargas(q), delDia = await turnosDelDia(q, t.fecha);
   const dentro = new Set((await q`select trabajador_id from turnos where bajada_id = ${t.bajada_id} and estado <> 'rechazado'`).map(x => x.trabajador_id));
   const libres = (await q`select id, nombre, funciones from cuentas where tipo = 'trabajador' and activa`)
     .filter(g => g.funciones.includes(t.funcion) && g.id !== yo.id && !dentro.has(g.id) && !choque(g.id, { id: t.bajada_id, tramo: t.tramo }, delDia))
     .sort((x, y) => (carga.get(x.id) || 0) - (carga.get(y.id) || 0)).slice(0, 3);
-  await avisarAdmins(q, 'rechazado', `${quien} rechazó la bajada de ${t.horario}`,
-    `${NOMBRE_FUNCION[t.funcion]} · ${cuando}${mot ? ` · “${mot}”` : ''}. Reemplazo sugerido: ${libres.map(g => `${g.nombre.split(' ')[0]} (${carga.get(g.id) || 0})`).join(', ') || 'nadie disponible'}.`, t.bajada_id);
+  await notificar(q, 'admins', {
+    tipo: 'rechazado', titulo: `${quien} rechazó la bajada de ${t.horario}`, ruta: 'armar:' + t.fecha, ref: t.bajada_id,
+    cuerpo: `${NOMBRE_FUNCION[t.funcion]} · ${cuando}${mot ? ` · “${mot}”` : ''}. Reemplazo sugerido: ${libres.map(g => `${g.nombre.split(' ')[0]} (${carga.get(g.id) || 0})`).join(', ') || 'nadie disponible'}.`
+  });
   return { ok: true, estado: 'rechazado' };
 }
 
@@ -334,10 +339,14 @@ async function cerrar({ q, yo, b }) {
   const pax = parseInt(b.pax, 10);
   if (!(pax >= 0 && pax <= 60)) throw new Fallo(400, 'Indica cuántos bajaron (0 a 60).');
   const inc = clip(b.incidentes, 1000) || null;
-  await q`update turnos set estado = 'cerrado', cerrado_en = now(), pax_finales = ${pax}, incidentes = ${inc} where id = ${id}`;
+  const ganado = await q`update turnos set estado = 'cerrado', cerrado_en = now(), pax_finales = ${pax}, incidentes = ${inc} where id = ${id} and estado = 'aceptado' returning id`;
+  if (!ganado.length) throw new Fallo(409, 'Este turno ya está cerrado.');
   const [aun] = await q`select count(*)::int as n from turnos where bajada_id = ${t.bajada_id} and estado in ('asignado', 'aceptado')`;
   if (!aun.n) await q`update bajadas set estado = 'cerrada' where id = ${t.bajada_id} and estado = 'publicada'`;
-  await avisarAdmins(q, 'cierre', `${yo.nombre} cerró su turno de las ${t.horario}`, `${NOMBRE_FUNCION[t.funcion]} · ${pax} ${pax === 1 ? 'pasajero' : 'pasajeros'}${inc ? ' · con incidentes' : ''}`, t.bajada_id);
+  await notificar(q, 'admins', {
+    tipo: 'cierre', titulo: `${yo.nombre} cerró su turno de las ${t.horario}`, ruta: 'pagos', ref: t.bajada_id,
+    cuerpo: `${NOMBRE_FUNCION[t.funcion]} · ${pax} ${pax === 1 ? 'pasajero' : 'pasajeros'}${inc ? ' · con incidentes' : ''}`
+  });
   return { ok: true };
 }
 
@@ -416,12 +425,31 @@ async function pagar({ q, yo, b }) {
   const tid = parseInt(b.trabajador_id, 10);
   const rows = await q`update turnos set estado = 'pagado', pagado_en = now() where trabajador_id = ${tid} and estado = 'cerrado'
     and bajada_id in (select id from bajadas where fecha between ${desde} and ${hasta}) returning tarifa`;
-  if (rows.length) await avisar(q, tid, 'pago', 'Te pagamos tus bajadas', `${rows.length} ${rows.length === 1 ? 'bajada' : 'bajadas'} · ${clp(rows.reduce((a, r) => a + (r.tarifa || 0), 0))}`, null);
+  if (rows.length) await notificar(q, tid, { tipo: 'pago', titulo: 'Te pagamos tus bajadas', ruta: 'pagos', cuerpo: `${rows.length} ${rows.length === 1 ? 'bajada' : 'bajadas'} · ${clp(rows.reduce((a, r) => a + (r.tarifa || 0), 0))}` });
   return { ok: true, pagadas: rows.length };
 }
 
-const GET = { instalado, rev, yo: yoInfo, dia, turnos: misTurnos, turno, avisos: avisosDe, equipo, pagos };
-const POST = { setup, login, asignar, autodistribuir, publicar, responder, checkin, cerrar, leido, equipo_crear: equipoCrear, equipo_editar: equipoEditar, perfil, pagar };
+// ---- Avisos al celular (Web Push)
+async function pushClave({ q }) { return { clave: (await vapid(q)).publicKey }; }
+
+async function pushSuscribir({ q, yo, b, req }) {
+  if (!suscripcionValida(b.sub)) throw new Fallo(400, 'Este navegador no entregó una suscripción de avisos válida.');
+  await guardarSuscripcion(q, yo.id, b.sub, req.headers['user-agent']);
+  return { ok: true };
+}
+// Al cerrar sesión el teléfono se desvincula: así el siguiente que use ese celular no recibe los avisos de otra persona.
+async function pushBaja({ q, yo, b }) { await borrarSuscripcion(q, yo.id, b.endpoint); return { ok: true }; }
+
+async function pushProbar({ q, yo }) {
+  const [n] = await q`select count(*)::int as n from push_subs where cuenta_id = ${yo.id}`;
+  if (!n.n) throw new Fallo(409, 'Este teléfono aún no tiene los avisos activados.');
+  const r = await enviarPush(q, [yo.id], { t: 'Los avisos funcionan', b: 'Así te va a llegar cada aviso de Maipo River.', r: 'avisos', g: 'prueba' });
+  if (!r.enviados) throw new Fallo(502, 'No se pudo enviar el aviso de prueba. Desactiva y vuelve a activar los avisos.');
+  return { ok: true, enviados: r.enviados };
+}
+
+const GET = { instalado, rev, yo: yoInfo, dia, turnos: misTurnos, turno, avisos: avisosDe, equipo, pagos, push_clave: pushClave };
+const POST = { setup, login, asignar, autodistribuir, publicar, responder, checkin, cerrar, leido, equipo_crear: equipoCrear, equipo_editar: equipoEditar, perfil, pagar, push_suscribir: pushSuscribir, push_baja: pushBaja, push_probar: pushProbar };
 const PUBLICAS = new Set(['instalado', 'setup', 'login']);
 
 export default async function handler(req, res) {

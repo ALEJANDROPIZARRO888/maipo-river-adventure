@@ -1,9 +1,11 @@
 {
   "name": "maipo-river-adventure",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=20" },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.4"
+    "@neondatabase/serverless": "^0.10.4",
+    "nodemailer": "^6.9.16"
   }
 }

@@ -51,6 +51,14 @@ export function ensureSchema() {
     )`;
     await q`create table if not exists config (k text primary key, v text not null)`;
     await q`alter table reservas add column if not exists cupo_sync boolean not null default false`;
+    await q`alter table fichas alter column reserva_id drop not null`;
+    await q`alter table fichas add column if not exists salida text`;
+    await q`alter table fichas add column if not exists tramo text`;
+    await q`alter table fichas add column if not exists edad int`;
+    await q`alter table fichas add column if not exists sabe_nadar boolean`;
+    await q`alter table fichas add column if not exists uso_imagen boolean`;
+    await q`alter table fichas add column if not exists consent_texto text`;
+    await q`alter table fichas add column if not exists idioma_ficha text`;
   })());
 }
 

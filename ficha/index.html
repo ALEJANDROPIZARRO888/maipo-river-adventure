@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
 <title>Ficha del pasajero — Maipo River Adventure</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -124,6 +125,12 @@ const token = new URLSearchParams(location.search).get('r') || '';
 let lang = (localStorage.getItem('mra_ficha_lang') || (navigator.language||'es').slice(0,2)) === 'en' ? 'en' : 'es';
 let info = null;
 
+function fmtFecha(f) {
+  const d = new Date(String(f).slice(0, 10) + 'T12:00:00Z');
+  if (isNaN(d)) return String(f);
+  return new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'es-CL', { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'UTC' }).format(d);
+}
+
 function render() {
   const t = T[lang];
   document.documentElement.lang = lang;
@@ -132,7 +139,7 @@ function render() {
     h_emerg:'emerg', l_en:'en', l_et:'et', l_med:'med', l_menor:'menor', h_apo:'apo', l_apn:'apn', l_apd:'apd', l_apf:'apf',
     h_cons:'cons', l_acepto:'acepto', l_firma:'firma', send:'send', consent:'consentText', d_t:'dT' };
   for (const [id,k] of Object.entries(m)) $(id).textContent = t[k];
-  if (info) $('resumen').textContent = t.resumen(info);
+  if (info) $('resumen').textContent = t.resumen({ ...info, fecha: fmtFecha(info.fecha) });
 }
 $('bes').onclick = () => { lang='es'; try{localStorage.setItem('mra_ficha_lang',lang)}catch{} render(); };
 $('ben').onclick = () => { lang='en'; try{localStorage.setItem('mra_ficha_lang',lang)}catch{} render(); };

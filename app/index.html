@@ -2,6 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<script>
+  // La app (y su service worker, que avisa al celular) vive en /app/. Si alguien la abre como /app (sin la barra final) queda
+  // fuera del alcance del service worker y los avisos no se pueden activar: se lleva a /app/ antes de cargar nada.
+  if (location.pathname === '/app' || location.pathname === '/app/index.html') location.replace('/app/' + location.search + location.hash);
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#1d2d3d">

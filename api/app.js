@@ -379,7 +379,7 @@ async function equipoCrear({ q, yo, b, req }) {
     subject: 'Tu acceso a la app de Maipo River Adventure',
     html: emailShell(`<h2 style="margin:8px 0">Hola ${esc(nombre.split(' ')[0])}, ya tienes acceso</h2>
       <p>Entra desde tu celular y agrégala a la pantalla de inicio:</p>
-      <p style="margin:16px 0"><a href="${base}/app" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">Abrir la app</a></p>
+      <p style="margin:16px 0"><a href="${base}/app/" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">Abrir la app</a></p>
       <p>Usuario: <b>${esc(usuario)}</b><br>Contraseña temporal: <b>${esc(clave)}</b></p>
       <p style="font-size:13px;color:#5b6167">Cámbiala en tu perfil la primera vez que entres.</p>`) }), 6000) : false;
   return { ok: true, id: c.id, usuario, clave, correoEnviado };

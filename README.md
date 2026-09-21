@@ -48,7 +48,7 @@ Una sola app con dos áreas según el tipo de cuenta. Se instala desde el navega
 
 ## Pruebas
 
-`npm install` y luego `npm test`. Corre en unos 25 segundos y no toca ninguna base real:
+`npm install` y luego `npm test`. Corre en unos 45 segundos (una prueba tras otra, para que no compitan por memoria) y no toca ninguna base real:
 
 - `test/*.test.js`: funciones puras (tarifas, reparto en balsas, elección de personal, choques de horario, validación de suscripciones push).
 - `test/e2e/*.test.mjs`: los handlers reales de la API sobre PostgreSQL en memoria ([PGlite](https://pglite.dev), dependencia de desarrollo). Cubren salidas y fichas, la app completa (cuentas, sesiones, armado, publicar, turnos, pagos, tiempo real, avisos push con un emisor simulado) y las regresiones de seguridad. Correrlas antes de publicar a `main`.

@@ -103,20 +103,34 @@ const instalada = () => matchMedia('(display-mode: standalone)').matches || navi
 const puedePush = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const urlB64 = s => { const p = '='.repeat((4 - s.length % 4) % 4), b = (s + p).replace(/-/g, '+').replace(/_/g, '/'); return Uint8Array.from(atob(b), c => c.charCodeAt(0)); };
 const igual = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-// navigator.serviceWorker.ready nunca se resuelve si no hay un service worker activo (registro fallido o en curso).
-// Por eso no se espera más de 3 s: un fallo ahí no debe dejar colgada la app ni impedir cerrar sesión.
-const swListo = (ms = 3000) => Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), ms))]);
+// El registro del service worker se pide POR SU ALCANCE, no con navigator.serviceWorker.ready. `ready` solo se resuelve si la
+// página misma está dentro del alcance (/app/): al abrir /app (sin la barra final) queda fuera y no se resuelve nunca, y los
+// avisos no se podían activar. Con el registro por alcance da igual desde qué dirección se abrió la página.
+// Espera como máximo `ms` a que esté activo y devuelve null si no se logra (así nada queda colgado, ni cerrar sesión).
+async function swRegistro(ms = 6000) {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    const reg = (await navigator.serviceWorker.getRegistration('/app/')) || (await navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' }));
+    const w = reg.installing || reg.waiting;
+    if (!reg.active && w) await new Promise(res => {
+      if (w.state === 'activated') return res();
+      const t = setTimeout(res, ms);
+      w.addEventListener('statechange', () => { if (w.state === 'activated') { clearTimeout(t); res(); } });
+    });
+    return reg.active && reg.active.state === 'activated' ? reg : null;
+  } catch { return null; }
+}
 
 // activo · pendiente (falta activarlos) · bloqueado · instalar (iPhone sin instalar) · no-soportado
 async function estadoPush() {
   if (!puedePush()) return esIOS && !instalada() ? 'instalar' : 'no-soportado';
   if (Notification.permission === 'denied') return 'bloqueado';
   if (Notification.permission !== 'granted') return 'pendiente';
-  try { const reg = await swListo(); return reg && (await reg.pushManager.getSubscription()) ? 'activo' : 'pendiente'; } catch { return 'pendiente'; }
+  try { const reg = await swRegistro(); return reg && (await reg.pushManager.getSubscription()) ? 'activo' : 'pendiente'; } catch { return 'pendiente'; }
 }
 async function suscribirse() {
-  const reg = await swListo();
-  if (!reg) throw new Error('La app aún no está lista para recibir avisos. Espera unos segundos y vuelve a intentar.');
+  const reg = await swRegistro();
+  if (!reg) throw new Error('No se pudo preparar la app para recibir avisos. Cierra la app, vuelve a abrirla e intenta de nuevo.');
   const { clave } = await pedir('GET', '/api/app?a=push_clave'), key = urlB64(clave);
   let sub = await reg.pushManager.getSubscription();
   if (sub && !(sub.options && sub.options.applicationServerKey && igual(new Uint8Array(sub.options.applicationServerKey), key))) { await sub.unsubscribe(); sub = null; }
@@ -136,12 +150,12 @@ async function activarAvisos() {
   S.push = await estadoPush(); render();
 }
 async function desactivarAvisos() {
-  try { const reg = await swListo(), sub = reg && await reg.pushManager.getSubscription(); if (sub) { await post('push_baja', { endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
+  try { const reg = await swRegistro(), sub = reg && await reg.pushManager.getSubscription(); if (sub) { await post('push_baja', { endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
   S.push = await estadoPush(); render();
 }
 // Al cerrar sesión el teléfono se desvincula, para que quien use después este celular no reciba los avisos de otra persona.
 async function desvincularPush() {
-  try { if (puedePush()) { const reg = await swListo(1200), sub = reg && await reg.pushManager.getSubscription(); if (sub) await post('push_baja', { endpoint: sub.endpoint }); } } catch {}
+  try { if (puedePush()) { const reg = await swRegistro(1200), sub = reg && await reg.pushManager.getSubscription(); if (sub) await post('push_baja', { endpoint: sub.endpoint }); } } catch {}
 }
 const ocultoAvisos = () => Date.now() - Number(store.get('mra_push_no') || 0) < 3 * 864e5;
 function limpiarBadge() { try { navigator.clearAppBadge && navigator.clearAppBadge(); } catch {} }
@@ -376,8 +390,8 @@ function vEquipo() {
   return `<h1>Equipo</h1>${errBox()}
     ${nuevo ? `<div class="card acento"><div class="head"><b>Acceso listo</b></div><p>Entrégale estos datos a <b>${esc(nuevo.nombre)}</b>. La clave se muestra una sola vez.</p>
       <p style="font-size:18px">Usuario: <b>${esc(nuevo.usuario)}</b><br>Clave: <b>${esc(nuevo.clave)}</b></p>${nuevo.correoEnviado ? '<p class="muted small">También se la enviamos por correo.</p>' : ''}
-      <div class="row"><button data-a="copiar" data-t="${esc(`Maipo River — entra a ${location.origin}/app\nUsuario: ${nuevo.usuario}\nClave: ${nuevo.clave}`)}">Copiar</button>
-      <a class="tag" style="align-self:center" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`Hola ${nuevo.nombre.split(' ')[0]}! Entra a ${location.origin}/app\nUsuario: ${nuevo.usuario}\nClave: ${nuevo.clave}`)}">Enviar por WhatsApp</a>
+      <div class="row"><button data-a="copiar" data-t="${esc(`Maipo River — entra a ${location.origin}/app/\nUsuario: ${nuevo.usuario}\nClave: ${nuevo.clave}`)}">Copiar</button>
+      <a class="tag" style="align-self:center" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`Hola ${nuevo.nombre.split(' ')[0]}! Entra a ${location.origin}/app/\nUsuario: ${nuevo.usuario}\nClave: ${nuevo.clave}`)}">Enviar por WhatsApp</a>
       <button class="ghost" data-a="cerrarClave">Listo</button></div></div>` : ''}
     <details class="card" data-k="nuevo-miembro"${abierto('nuevo-miembro', false) ? ' open' : ''}><summary><b>Agregar colaborador</b></summary>
       <form data-f="nuevoMiembro"><label for="nm-nombre">Nombre completo</label><input id="nm-nombre" name="nombre" required autocomplete="off">

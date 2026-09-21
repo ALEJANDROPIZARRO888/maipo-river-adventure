@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Ficha de pasajero — Maipo River Adventure</title>
+<link rel="icon" href="/favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f2f2f3; --text:#1d1f20; --accent:#5980a6; --a100:#eef6ff; --a400:#94bce3; --a600:#597ea3; --a700:#416180; --a800:#2c455d; --a900:#1d2d3d; --line:rgba(29,31,32,.16); --muted:rgba(29,31,32,.58); --surface:#e9e9ea; }
+  * { box-sizing:border-box; border-radius:0; }
+  body { margin:0; background:var(--bg); color:var(--text); font:400 15px/1.55 Barlow,system-ui,sans-serif; }
+  h1,h2 { font-family:'Barlow Condensed',system-ui,sans-serif; font-weight:600; line-height:1.05; letter-spacing:-.015em; margin:0; }
+  a { color:var(--a700); text-decoration:none; } a:hover { text-decoration:underline; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .wrap { max-width:760px; margin:0 auto; padding:26px 20px 60px; }
+  .top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:22px; }
+  .kicker { font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--a700); }
+  .top h1 { font-size:34px; margin-top:2px; }
+  .sub { font-size:13px; color:var(--muted); }
+  .tools { display:flex; align-items:center; gap:12px; }
+  .seg { display:inline-flex; border:1px solid var(--line); }
+  .seg button { font:500 12.5px Barlow; min-height:38px; padding:0 13px; border:0; background:transparent; cursor:pointer; color:var(--text); }
+  .seg button + button { border-left:1px solid var(--line); }
+  .seg button[aria-pressed=true] { background:var(--accent); color:var(--bg); }
+  .logo { width:52px; height:52px; background:var(--a900); display:grid; place-items:center; flex:none; }
+  .logo img { width:40px; height:auto; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:15px 18px; }
+  .full { grid-column:1 / -1; }
+  label { display:block; font-size:12px; margin-bottom:5px; color:rgba(29,31,32,.72); }
+  input[type=text],input[type=tel],input[type=email],input[type=date],textarea { width:100%; min-height:46px; padding:6px 10px; font:inherit; font-size:15px; color:var(--text); background:var(--surface); border:1px solid var(--line); caret-color:var(--accent); }
+  textarea { min-height:78px; resize:vertical; }
+  input:hover,textarea:hover { border-color:rgba(29,31,32,.45); }
+  input:focus-visible,textarea:focus-visible { border-color:var(--accent); outline-offset:0; }
+  .note { font-size:11px; margin-top:5px; color:var(--muted); }
+  .checks { display:flex; flex-wrap:wrap; gap:10px 26px; margin:18px 0 4px; }
+  .chk { display:flex; align-items:flex-start; gap:10px; font:inherit; font-size:14px; text-align:left; background:transparent; border:0; padding:0; cursor:pointer; min-height:46px; color:inherit; }
+  .box { width:21px; height:21px; margin-top:1px; display:grid; place-items:center; border:1px solid var(--line); color:var(--bg); font-size:12px; flex:none; }
+  .chk[aria-checked=true] .box { border-color:var(--accent); background:var(--accent); }
+  .guardian { display:none; padding:15px; border:1px solid var(--a400); background:var(--a100); margin:6px 0 2px; }
+  .guardian.on { display:block; }
+  .guardian .kicker { color:var(--a800); margin-bottom:10px; }
+  .guardian .note { color:var(--a800); font-size:12px; line-height:1.5; margin-top:9px; }
+  .guardian input { background:var(--bg); }
+  .bp { position:relative; margin-top:22px; padding:18px; border:1px solid var(--line); }
+  .bp > i { position:absolute; width:11px; height:11px; color:rgba(29,31,32,.55); }
+  .bp > i::before,.bp > i::after { content:""; position:absolute; background:currentColor; }
+  .bp > i::before { left:5px; top:0; width:1px; height:100%; } .bp > i::after { top:5px; left:0; width:100%; height:1px; }
+  .bp > i.tl { top:-6px; left:-6px; } .bp > i.tr { top:-6px; right:-6px; } .bp > i.bl { bottom:-6px; left:-6px; } .bp > i.br { bottom:-6px; right:-6px; }
+  .consent { font-size:13px; line-height:1.6; max-height:200px; overflow:auto; padding-right:12px; color:rgba(29,31,32,.76); }
+  .sign { font-family:'Barlow Condensed',sans-serif !important; font-size:21px !important; letter-spacing:.02em; min-height:50px !important; }
+  .btn { width:100%; min-height:56px; font:600 17px 'Barlow Condensed',sans-serif; letter-spacing:.02em; margin-top:20px; background:var(--accent); color:var(--bg); border:1px solid var(--accent); cursor:pointer; }
+  .btn:hover { background:var(--a600); } .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn.sec { width:auto; padding:0 20px; min-height:48px; background:transparent; color:var(--text); border-color:var(--line); margin-top:16px; }
+  .msg { font-size:13px; line-height:1.5; text-align:center; margin-top:11px; color:var(--a800); min-height:20px; }
+  .ok { width:56px; height:56px; display:grid; place-items:center; background:var(--a900); color:var(--bg); font-size:26px; margin-bottom:18px; }
+  #sent { display:none; } #sent h1 { font-size:34px; margin-bottom:8px; }
+  .lead { font-size:14.5px; line-height:1.55; color:rgba(29,31,32,.66); margin-bottom:22px; }
+  .step { display:flex; align-items:flex-start; gap:11px; margin-bottom:11px; }
+  .step b { width:22px; height:22px; display:grid; place-items:center; border:1px solid var(--line); font:600 12px 'Barlow Condensed',sans-serif; flex:none; }
+  .foot { padding:14px; border:1px dashed var(--line); font-size:12.5px; line-height:1.55; color:var(--muted); }
+  .hp { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+  .back { display:inline-block; margin-bottom:14px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/" id="back">← maiporiveradventure.cl</a>
+  <div class="top">
+    <div style="min-width:0">
+      <div class="kicker" id="tKicker"></div>
+      <h1 id="tTitle"></h1>
+      <div class="sub" id="salidaLinea"></div>
+    </div>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Idioma / Language">
+        <button type="button" data-lang="ES" aria-pressed="true">ES</button>
+        <button type="button" data-lang="EN" aria-pressed="false">EN</button>
+      </div>
+      <a class="logo" href="/" aria-label="Maipo River Adventure"><img src="/logo.png" alt=""></a>
+    </div>
+  </div>
+
+  <form id="form" novalidate autocomplete="on">
+    <input class="hp" type="text" name="website" id="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <div class="grid">
+      <div class="full"><label for="name"><span id="lName"></span> *</label><input type="text" id="name" autocomplete="name" maxlength="120"></div>
+      <div><label for="rut"><span id="lId"></span> *</label><input type="text" id="rut" placeholder="12.345.678-9" maxlength="40"></div>
+      <div><label for="nac"><span id="lBirth"></span> *</label><input type="date" id="nac"><div class="note" id="edadNota"></div></div>
+      <div><label for="tel"><span id="lPhone"></span> *</label><input type="tel" id="tel" placeholder="+56 9 1234 5678" autocomplete="tel" maxlength="40"></div>
+      <div><label for="mail">Email *</label><input type="email" id="mail" autocomplete="email" maxlength="160"></div>
+      <div><label for="nat" id="lNat"></label><input type="text" id="nat" placeholder="Chile" maxlength="60"></div>
+      <div><label for="idioma" id="lLangPref"></label><input type="text" id="idioma" maxlength="40"></div>
+      <div class="full"><label for="emg"><span id="lEmg"></span> *</label><input type="text" id="emg" maxlength="200"></div>
+      <div class="full"><label for="med" id="lMed"></label><textarea id="med" maxlength="1000"></textarea></div>
+    </div>
+
+    <div class="checks">
+      <button type="button" class="chk" id="cNada" role="checkbox" aria-checked="true"><span class="box">✓</span><span id="lNada"></span></button>
+      <button type="button" class="chk" id="cFoto" role="checkbox" aria-checked="true"><span class="box">✓</span><span id="lFoto"></span></button>
+    </div>
+
+    <div class="guardian" id="guardian">
+      <div class="kicker" id="tGuardian"></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:13px">
+        <div><label for="apoNom"><span id="lApoNom"></span> *</label><input type="text" id="apoNom" maxlength="120"></div>
+        <div><label for="apoRut"><span id="lApoRut"></span> *</label><input type="text" id="apoRut" maxlength="60"></div>
+      </div>
+      <div class="note" id="tApoNote"></div>
+    </div>
+
+    <div class="bp">
+      <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+      <div class="kicker" id="tConsentTitle" style="margin-bottom:10px"></div>
+      <div class="consent" id="consentText" tabindex="0"></div>
+      <button type="button" class="chk" id="cConsent" role="checkbox" aria-checked="false" style="margin-top:14px;font-size:13.5px;line-height:1.45"><span class="box"></span><span id="lConsent"></span></button>
+      <div style="margin-top:14px">
+        <label for="firma"><span id="lSign"></span> *</label>
+        <input type="text" id="firma" class="sign" maxlength="120" autocomplete="off">
+        <div class="note" id="firmaNota" style="font-size:11.5px"></div>
+      </div>
+    </div>
+
+    <button type="submit" class="btn" id="submit"></button>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+  </form>
+
+  <div id="sent">
+    <div class="ok">✓</div>
+    <h1 id="tSentTitle"></h1>
+    <div class="lead" id="sentBody"></div>
+    <div class="bp" style="margin-top:0;margin-bottom:16px">
+      <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+      <div class="kicker" id="tNext" style="margin-bottom:12px"></div>
+      <div id="steps"></div>
+    </div>
+    <div class="foot" id="tSentFoot"></div>
+    <button type="button" class="btn sec" id="another"></button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var qs = new URLSearchParams(location.search);
+  var TOKEN = (qs.get('r') || '').trim();
+  var SALIDA = (qs.get('salida') || '').trim().slice(0, 80);
+  var st = { lang: (navigator.language || '').toLowerCase().indexOf('en') === 0 ? 'EN' : 'ES', nada: true, foto: true, consent: false, sentName: '', info: null, busy: false };
+
+  var TX = {
+    ES: {
+      kicker: 'Registro de pasajero · Maipo River Adventure', title: 'Ficha e inscripción',
+      name: 'Nombre completo', id: 'RUT o pasaporte', birth: 'Fecha de nacimiento', phone: 'Teléfono',
+      emailHint: 'aquí te llegan las fotos y tu consentimiento', nat: 'Nacionalidad',
+      langPref: 'Idioma preferido en el río', langHint: 'Español / English',
+      emg: 'Contacto de emergencia (nombre y teléfono)', emgHint: 'Marta Fuentes — +56 9 8712 4409',
+      med: 'Condiciones médicas, medicamentos o lesiones',
+      medHint: 'Escribe «ninguna» si no aplica. Esto lo lee tu guía antes de subir a la balsa.',
+      nada: 'Sé nadar', foto: 'Autorizo el uso de mi imagen',
+      guardian: 'Datos del apoderado · obligatorio para menores de 18', apoNom: 'Nombre del apoderado', apoRut: 'RUT y parentesco',
+      apoRutHint: '12.345.678-9 — madre', apoNote: 'El apoderado firma en nombre del menor escribiendo su propio nombre completo más abajo.',
+      consentTitle: 'Consentimiento de seguridad',
+      consentCheck: 'He leído y acepto el consentimiento de seguridad y la política de uso de imagen.',
+      sign: 'Escribe tu nombre completo como firma electrónica', signHint: 'Tu nombre completo, tal como en tu documento',
+      submit: 'Enviar ficha', sending: 'Enviando…',
+      sentTitle: '¡Listo, nos vemos en el río!', next: 'Qué pasa ahora', another: 'Registrar a otra persona',
+      ageNone: 'La usamos para el chaleco y la charla de seguridad',
+      years: function (n) { return n + ' años'; }, yearsMinor: function (n) { return n + ' años · necesitamos los datos de tu apoderado'; },
+      signOk: 'Firma válida · queda registrada con fecha, hora e IP', signBad: 'Escribe nombre y apellido, como aparece en tu documento',
+      sentBody: function (n) { return (n || 'Tu ficha') + ', tu registro quedó guardado y tu guía ya puede ver tus datos. Te enviamos una copia del consentimiento a tu correo.'; },
+      steps: ['Llega 20 minutos antes a la base, en San Alfonso.', 'Trae traje de baño, toalla y una muda seca. El casco, el chaleco y el traje los ponemos nosotros.', 'Tu guía dará la charla de seguridad antes de subir a la balsa.'],
+      foot: 'Después de la bajada te enviamos las fotos del día por correo, de regalo. Si quieres el video del descenso, tu guía te pasará el enlace.',
+      lineDefault: 'Rafting en el río Maipo',
+      e: { name: 'Escribe tu nombre y apellido.', rut: 'Falta tu RUT o pasaporte.', birth: 'Revisa tu fecha de nacimiento.', tel: 'Falta tu teléfono.', mail: 'Revisa tu correo: ahí te llegan las fotos.', emg: 'Falta el contacto de emergencia.', apo: 'Por ser menor de 18, completa los datos del apoderado.', consent: 'Debes aceptar el consentimiento de seguridad.', sign: 'Escribe tu nombre completo como firma.', net: 'No pudimos enviar la ficha. Revisa tu conexión e inténtalo otra vez.', rate: 'Demasiados envíos seguidos. Espera unos minutos e inténtalo de nuevo.' },
+      consentText: 'Declaro conocer que el descenso en el río Maipo es una actividad de riesgo que se realiza en un medio natural cambiante, y que participo de forma libre y voluntaria. He informado verazmente mi estado de salud, mis condiciones médicas y si sé nadar. Me comprometo a usar en todo momento el casco, el chaleco de flotación y el traje entregados por la empresa, y a seguir las instrucciones del guía a cargo de mi balsa y del kayak de seguridad, tanto en la charla previa como durante el descenso. Autorizo a Maipo River Adventure a suspender, acortar o modificar el descenso por condiciones de caudal, clima o seguridad, sin derecho a devolución cuando la actividad ya haya comenzado. Libero a la empresa y a su personal de responsabilidad por daños derivados del incumplimiento de estas instrucciones o de la omisión de información sobre mi salud. Al escribir mi nombre completo y marcar la casilla firmo este documento electrónicamente, con la misma validez que una firma manuscrita, quedando registrados la fecha, la hora y la dirección IP del envío.'
+    },
+    EN: {
+      kicker: 'Passenger registration · Maipo River Adventure', title: 'Registration form',
+      name: 'Full name', id: 'ID or passport number', birth: 'Date of birth', phone: 'Phone',
+      emailHint: 'where we send your photos and signed consent', nat: 'Nationality',
+      langPref: 'Preferred language on the river', langHint: 'English / Español',
+      emg: 'Emergency contact (name and phone)', emgHint: 'Marta Fuentes — +56 9 8712 4409',
+      med: 'Medical conditions, medication or injuries',
+      medHint: 'Write “none” if not applicable. Your guide reads this before you board.',
+      nada: 'I can swim', foto: 'I allow use of my image',
+      guardian: 'Guardian details · required for under 18', apoNom: 'Guardian full name', apoRut: 'ID and relationship',
+      apoRutHint: '12.345.678-9 — mother', apoNote: 'The guardian signs on behalf of the minor by typing their own full name below.',
+      consentTitle: 'Safety consent',
+      consentCheck: 'I have read and accept the safety consent and the image use policy.',
+      sign: 'Type your full name as your electronic signature', signHint: 'Your full legal name',
+      submit: 'Submit form', sending: 'Sending…',
+      sentTitle: 'All set — see you on the river!', next: 'What happens now', another: 'Register another person',
+      ageNone: 'Used for vest sizing and the safety briefing',
+      years: function (n) { return n + ' years old'; }, yearsMinor: function (n) { return n + ' years old · we need your guardian’s details'; },
+      signOk: 'Valid signature · recorded with date, time and IP', signBad: 'Type your first and last name, as on your ID',
+      sentBody: function (n) { return (n || 'Your form') + ', your registration is saved and your guide can already see your details. We emailed you a copy of the consent.'; },
+      steps: ['Arrive 20 minutes early at our base in San Alfonso.', 'Bring swimwear, a towel and dry clothes. Helmet, vest and wetsuit are on us.', 'Your guide gives the safety briefing before you board.'],
+      foot: 'After the descent we email you the day’s photos as a gift. If you want the descent video, your guide will send you the link.',
+      lineDefault: 'Maipo river rafting',
+      e: { name: 'Enter your first and last name.', rut: 'Your ID or passport is missing.', birth: 'Check your date of birth.', tel: 'Your phone is missing.', mail: 'Check your email: that is where photos are sent.', emg: 'Emergency contact is missing.', apo: 'Under 18: complete the guardian details.', consent: 'You must accept the safety consent.', sign: 'Type your full name as signature.', net: 'We could not submit the form. Check your connection and try again.', rate: 'Too many submissions in a row. Wait a few minutes and try again.' },
+      consentText: 'I acknowledge that descending the Maipo river is a risk activity carried out in a changing natural environment, and that I take part freely and voluntarily. I have truthfully reported my health condition, any medical conditions, and whether I can swim. I undertake to wear the helmet, buoyancy vest and wetsuit provided by the company at all times, and to follow the instructions of the guide in charge of my raft and of the safety kayaker, both in the pre-trip briefing and during the descent. I authorise Maipo River Adventure to suspend, shorten or modify the descent due to water level, weather or safety conditions, with no refund once the activity has begun. I release the company and its staff from liability for harm arising from failure to follow these instructions or from withholding information about my health. By typing my full name and checking the box I sign this document electronically, with the same validity as a handwritten signature; the date, time and IP address of submission are recorded.'
+    }
+  };
+
+  var MONTHS = { ES: ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'], EN: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] };
+  var DAYS = { ES: ['dom','lun','mar','mié','jue','vie','sáb'], EN: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] };
+  function fdate(f, l) {
+    var p = String(f).slice(0, 10).split('-').map(Number);
+    var d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+    return DAYS[l][d.getUTCDay()] + ' ' + p[2] + ' ' + MONTHS[l][p[1] - 1] + ' ' + p[0];
+  }
+  function edad() {
+    var v = $('nac').value; if (!v) return null;
+    var n = new Date(v + 'T00:00:00'); if (isNaN(n)) return null;
+    var h = new Date(), a = h.getFullYear() - n.getFullYear(), m = h.getMonth() - n.getMonth();
+    if (m < 0 || (m === 0 && h.getDate() < n.getDate())) a--;
+    return a >= 0 && a < 120 ? a : null;
+  }
+  function words(t) { return t.trim().split(/\s+/).filter(Boolean).length; }
+  function setChk(id, on) { var b = $(id); b.setAttribute('aria-checked', on ? 'true' : 'false'); b.querySelector('.box').textContent = on ? '✓' : ''; }
+
+  function render() {
+    var T = TX[st.lang], a = edad(), menor = a !== null && a < 18;
+    document.documentElement.lang = st.lang.toLowerCase();
+    document.querySelectorAll('.seg button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.lang === st.lang ? 'true' : 'false'); });
+    $('tKicker').textContent = T.kicker; $('tTitle').textContent = T.title;
+    var linea = T.lineDefault;
+    if (st.info) linea = fdate(st.info.fecha, st.lang) + ' · ' + st.info.horario + ' · ' + st.info.tramo;
+    else if (SALIDA) linea = SALIDA;
+    $('salidaLinea').textContent = linea;
+    $('lName').textContent = T.name; $('lId').textContent = T.id; $('lBirth').textContent = T.birth; $('lPhone').textContent = T.phone;
+    $('lNat').textContent = T.nat; $('lLangPref').textContent = T.langPref; $('lEmg').textContent = T.emg; $('lMed').textContent = T.med;
+    $('name').placeholder = 'Camila Fuentes Rojas'; $('mail').placeholder = T.emailHint; $('idioma').placeholder = T.langHint;
+    $('emg').placeholder = T.emgHint; $('med').placeholder = T.medHint; $('apoRut').placeholder = T.apoRutHint; $('firma').placeholder = T.signHint;
+    $('lNada').textContent = T.nada; $('lFoto').textContent = T.foto;
+    $('tGuardian').textContent = T.guardian; $('lApoNom').textContent = T.apoNom; $('lApoRut').textContent = T.apoRut; $('tApoNote').textContent = T.apoNote;
+    $('guardian').classList.toggle('on', menor);
+    $('tConsentTitle').textContent = T.consentTitle; $('consentText').textContent = T.consentText; $('lConsent').textContent = T.consentCheck; $('lSign').textContent = T.sign;
+    $('edadNota').textContent = a === null ? T.ageNone : (menor ? T.yearsMinor(a) : T.years(a));
+    var ok = words($('firma').value) >= 2 && $('firma').value.trim().length > 5;
+    $('firmaNota').textContent = ok ? T.signOk : T.signBad;
+    $('submit').textContent = st.busy ? T.sending : T.submit; $('submit').disabled = st.busy;
+    $('tSentTitle').textContent = T.sentTitle; $('sentBody').textContent = T.sentBody(st.sentName); $('tNext').textContent = T.next;
+    $('steps').innerHTML = ''; T.steps.forEach(function (t, i) {
+      var d = document.createElement('div'); d.className = 'step';
+      var b = document.createElement('b'); b.textContent = String(i + 1);
+      var s = document.createElement('span'); s.textContent = t; d.appendChild(b); d.appendChild(s); $('steps').appendChild(d);
+    });
+    $('tSentFoot').textContent = T.foot; $('another').textContent = T.another;
+  }
+
+  function fail(k) { $('msg').textContent = TX[st.lang].e[k]; }
+
+  document.querySelector('.seg').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) { st.lang = b.dataset.lang; render(); } });
+  ['nac', 'firma'].forEach(function (id) { $(id).addEventListener('input', render); });
+  $('nac').addEventListener('change', render);
+  $('cNada').onclick = function () { st.nada = !st.nada; setChk('cNada', st.nada); };
+  $('cFoto').onclick = function () { st.foto = !st.foto; setChk('cFoto', st.foto); };
+  $('cConsent').onclick = function () { st.consent = !st.consent; setChk('cConsent', st.consent); };
+
+  $('form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (st.busy) return;
+    var T = TX[st.lang], a = edad(), menor = a !== null && a < 18;
+    var name = $('name').value.trim(), mail = $('mail').value.trim(), firma = $('firma').value.trim();
+    if (words(name) < 2) return fail('name');
+    if (!$('rut').value.trim()) return fail('rut');
+    if (a === null) return fail('birth');
+    if (!$('tel').value.trim()) return fail('tel');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return fail('mail');
+    if (!$('emg').value.trim()) return fail('emg');
+    if (menor && (!$('apoNom').value.trim() || !$('apoRut').value.trim())) return fail('apo');
+    if (!st.consent) return fail('consent');
+    if (words(firma) < 2 || firma.length <= 5) return fail('sign');
+
+    st.busy = true; $('msg').textContent = ''; render();
+    var payload = {
+      r: TOKEN || undefined, salida: SALIDA || undefined, tramo: st.info ? st.info.tramo : undefined,
+      website: $('website').value,
+      nombre: name, rut: $('rut').value.trim(), nacimiento: $('nac').value, telefono: $('tel').value.trim(), email: mail,
+      nacionalidad: $('nat').value.trim(), idioma: $('idioma').value.trim() || st.lang,
+      emergencia: $('emg').value.trim(), medico: $('med').value.trim() || (st.lang === 'ES' ? 'ninguna' : 'none'),
+      sabeNadar: st.nada, usoImagen: st.foto,
+      apoderado: menor ? $('apoNom').value.trim() : '', apoderadoRut: menor ? $('apoRut').value.trim() : '',
+      consentimiento: true, consentTexto: T.consentText, firma: firma, idiomaFicha: st.lang
+    };
+    fetch('/api/ficha', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        st.busy = false;
+        if (!x.ok) { render(); return fail(x.status === 429 ? 'rate' : 'net'); }
+        st.sentName = name.split(/\s+/)[0];
+        $('form').style.display = 'none'; $('sent').style.display = 'block'; render(); window.scrollTo(0, 0);
+      })
+      .catch(function () { st.busy = false; render(); fail('net'); });
+  });
+
+  $('another').onclick = function () {
+    ['name', 'rut', 'nac', 'tel', 'mail', 'nat', 'idioma', 'emg', 'med', 'apoNom', 'apoRut', 'firma'].forEach(function (id) { $(id).value = ''; });
+    st.consent = false; setChk('cConsent', false); $('msg').textContent = '';
+    $('sent').style.display = 'none'; $('form').style.display = 'block'; render(); window.scrollTo(0, 0);
+  };
+
+  if (TOKEN) {
+    fetch('/api/ficha?r=' + encodeURIComponent(TOKEN)).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && j.fecha) { st.info = j; render(); } }).catch(function () {});
+  }
+  render();
+})();
+</script>
+</body>
+</html>

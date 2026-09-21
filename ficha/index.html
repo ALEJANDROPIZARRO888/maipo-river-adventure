@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ficha del pasajero — Maipo River Adventure</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f2f2f3; --ink:#1d1f20; --accent:#5980a6; --accent7:#2f5478; --deep:#1d2d3d; --line:#c9ccd0; }
+  * { box-sizing:border-box; border-radius:0; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:400 15px/1.45 Barlow,system-ui,sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:16px; }
+  h1 { font:700 30px/1.05 'Barlow Condensed',sans-serif; text-transform:uppercase; margin:8px 0 4px; }
+  h2 { font:600 18px 'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:.04em; margin:22px 0 8px; color:var(--deep); }
+  .top { display:flex; justify-content:space-between; align-items:center; }
+  .lang button { min-height:40px; padding:0 14px; background:none; border:1px solid var(--line); font:600 13px Barlow; cursor:pointer; }
+  .lang button.on { background:var(--deep); color:#fff; border-color:var(--deep); }
+  .card { position:relative; border:1px solid var(--line); padding:14px; margin:12px 0; }
+  .card::before,.card::after { content:'+'; position:absolute; font:500 14px/1 Barlow; color:var(--accent); }
+  .card::before { top:-8px; left:-5px; } .card::after { bottom:-8px; right:-5px; }
+  label { display:block; font:600 12px Barlow; text-transform:uppercase; letter-spacing:.05em; margin:12px 0 4px; }
+  input,textarea,select { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); background:#fff; font:400 15px Barlow; color:var(--ink); }
+  textarea { min-height:80px; }
+  input:focus,textarea:focus,select:focus,button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .check { display:flex; gap:10px; align-items:flex-start; margin:12px 0; }
+  .check input { width:22px; min-height:22px; margin-top:2px; }
+  .check label { text-transform:none; letter-spacing:0; font:400 14px Barlow; margin:0; }
+  .consent { max-height:170px; overflow:auto; border:1px solid var(--line); background:#fff; padding:10px; font-size:13px; }
+  .btn { width:100%; min-height:50px; margin-top:16px; background:var(--accent); color:#fff; border:0; font:600 16px 'Barlow Condensed'; text-transform:uppercase; letter-spacing:.06em; cursor:pointer; }
+  .btn:disabled { opacity:.5; }
+  .err { color:#a12727; font-size:13px; margin-top:6px; }
+  .info { color:var(--accent7); }
+  .ok { border-color:var(--accent); }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <span class="info" style="font:600 13px Barlow;text-transform:uppercase;letter-spacing:.08em">Maipo River Adventure</span>
+    <span class="lang"><button id="bes" class="on" type="button">ES</button><button id="ben" type="button">EN</button></span>
+  </div>
+  <h1 id="t_title"></h1>
+  <p id="resumen" class="info"></p>
+
+  <form id="f" novalidate>
+    <div class="card">
+      <label id="l_nombre"></label><input name="nombre" autocomplete="name" required>
+      <label id="l_doc"></label><input name="documento">
+      <div class="row">
+        <div><label id="l_nac"></label><input name="nacimiento" type="date"></div>
+        <div><label id="l_nacion"></label><input name="nacionalidad"></div>
+      </div>
+      <div class="row">
+        <div><label id="l_tel"></label><input name="telefono" type="tel" autocomplete="tel"></div>
+        <div><label id="l_mail"></label><input name="correo" type="email" autocomplete="email"></div>
+      </div>
+      <label id="l_idioma"></label>
+      <select name="idioma"><option value="es">Español</option><option value="en">English</option><option value="pt">Português</option></select>
+    </div>
+
+    <h2 id="h_emerg"></h2>
+    <div class="card">
+      <div class="row">
+        <div><label id="l_en"></label><input name="emergenciaNombre"></div>
+        <div><label id="l_et"></label><input name="emergenciaTel" type="tel"></div>
+      </div>
+      <label id="l_med"></label><textarea name="medico"></textarea>
+    </div>
+
+    <div class="check"><input type="checkbox" id="menor"><label for="menor" id="l_menor"></label></div>
+    <div class="card hide" id="apo">
+      <h2 id="h_apo" style="margin-top:0"></h2>
+      <label id="l_apn"></label><input name="apNombre">
+      <label id="l_apd"></label><input name="apDoc">
+      <label id="l_apf"></label><input name="apFirma">
+    </div>
+
+    <h2 id="h_cons"></h2>
+    <div class="consent" id="consent"></div>
+    <div class="check"><input type="checkbox" id="acepto"><label for="acepto" id="l_acepto"></label></div>
+    <label id="l_firma"></label><input name="firma" autocomplete="off">
+
+    <div class="err" id="err"></div>
+    <button class="btn" id="send" type="submit"></button>
+  </form>
+
+  <div class="card ok hide" id="done"><h2 style="margin-top:0" id="d_t"></h2><p id="d_p"></p></div>
+</main>
+
+<script>
+const T = {
+  es: {
+    title:'Ficha del pasajero', nombre:'Nombre completo', doc:'RUT o pasaporte', nac:'Fecha de nacimiento', nacion:'Nacionalidad',
+    tel:'Teléfono', mail:'Correo', idioma:'Idioma preferido en el río', emerg:'Contacto de emergencia', en:'Nombre', et:'Teléfono',
+    med:'Condiciones médicas, medicamentos o lesiones', menor:'Soy menor de 18 años', apo:'Datos del apoderado',
+    apn:'Nombre del apoderado', apd:'RUT o pasaporte del apoderado', apf:'Firma del apoderado (nombre completo)',
+    cons:'Consentimiento de seguridad', acepto:'He leído y acepto el consentimiento y asumo los riesgos propios de la actividad.',
+    firma:'Firma electrónica: escribe tu nombre completo', send:'Enviar ficha',
+    consentText:'El rafting es una actividad de aventura con riesgos inherentes, incluyendo caídas al agua, golpes, hipotermia y otros incidentes. Declaro que mis datos son verdaderos, que informé cualquier condición médica relevante, que participaré siguiendo las instrucciones de los guías y usando el equipo de seguridad entregado, y que no estoy bajo efectos de alcohol o drogas. Autorizo el tratamiento de mis datos para la operación y seguridad de la actividad. Mi firma electrónica, junto con la fecha, hora e IP de este envío, quedan registradas como constancia.',
+    resumen:(d)=>`Reserva de ${d.titular} · ${d.fecha} ${d.horario} · ${d.tramo}. Fichas recibidas: ${d.fichas} de ${d.personas}.`,
+    eNombre:'Falta el nombre.', eCons:'Debes aceptar el consentimiento.', eFirma:'Escribe tu nombre completo como firma (mínimo 5 caracteres).', eApo:'Los menores requieren datos y firma del apoderado.',
+    eNo:'No encontramos esta reserva. Escanea de nuevo el QR o usa el link del correo.', eGen:'No pudimos enviar la ficha. Intenta de nuevo.',
+    sending:'Enviando…', dT:'Ficha enviada', dP:(n,p)=>`Gracias. Van ${n} de ${p} fichas de esta reserva. Ya puedes cerrar esta página.`
+  },
+  en: {
+    title:'Passenger form', nombre:'Full name', doc:'ID or passport', nac:'Date of birth', nacion:'Nationality',
+    tel:'Phone', mail:'Email', idioma:'Preferred language on the river', emerg:'Emergency contact', en:'Name', et:'Phone',
+    med:'Medical conditions, medications or injuries', menor:'I am under 18', apo:'Guardian details',
+    apn:'Guardian name', apd:'Guardian ID or passport', apf:'Guardian signature (full name)',
+    cons:'Safety consent', acepto:'I have read and accept the consent and assume the inherent risks of the activity.',
+    firma:'Electronic signature: type your full name', send:'Submit form',
+    consentText:'Rafting is an adventure activity with inherent risks, including falls into the water, impacts, hypothermia and other incidents. I declare that my information is true, that I have disclosed any relevant medical condition, that I will follow the guides\' instructions and wear the safety equipment provided, and that I am not under the influence of alcohol or drugs. I authorize the processing of my data for the operation and safety of the activity. My electronic signature, together with the date, time and IP of this submission, is recorded as proof.',
+    resumen:(d)=>`Booking by ${d.titular} · ${d.fecha} ${d.horario} · ${d.tramo}. Forms received: ${d.fichas} of ${d.personas}.`,
+    eNombre:'Name is required.', eCons:'You must accept the consent.', eFirma:'Type your full name as signature (5 characters minimum).', eApo:'Minors require guardian details and signature.',
+    eNo:'We could not find this booking. Scan the QR again or use the link in your email.', eGen:'We could not submit the form. Please try again.',
+    sending:'Sending…', dT:'Form submitted', dP:(n,p)=>`Thank you. ${n} of ${p} forms received for this booking. You can close this page.`
+  }
+};
+const $ = id => document.getElementById(id);
+const f = $('f');
+const token = new URLSearchParams(location.search).get('r') || '';
+let lang = (localStorage.getItem('mra_ficha_lang') || (navigator.language||'es').slice(0,2)) === 'en' ? 'en' : 'es';
+let info = null;
+
+function render() {
+  const t = T[lang];
+  document.documentElement.lang = lang;
+  $('bes').classList.toggle('on', lang==='es'); $('ben').classList.toggle('on', lang==='en');
+  const m = { t_title:'title', l_nombre:'nombre', l_doc:'doc', l_nac:'nac', l_nacion:'nacion', l_tel:'tel', l_mail:'mail', l_idioma:'idioma',
+    h_emerg:'emerg', l_en:'en', l_et:'et', l_med:'med', l_menor:'menor', h_apo:'apo', l_apn:'apn', l_apd:'apd', l_apf:'apf',
+    h_cons:'cons', l_acepto:'acepto', l_firma:'firma', send:'send', consent:'consentText', d_t:'dT' };
+  for (const [id,k] of Object.entries(m)) $(id).textContent = t[k];
+  if (info) $('resumen').textContent = t.resumen(info);
+}
+$('bes').onclick = () => { lang='es'; try{localStorage.setItem('mra_ficha_lang',lang)}catch{} render(); };
+$('ben').onclick = () => { lang='en'; try{localStorage.setItem('mra_ficha_lang',lang)}catch{} render(); };
+$('menor').onchange = e => $('apo').classList.toggle('hide', !e.target.checked);
+
+fetch('/api/ficha?r=' + encodeURIComponent(token)).then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(d => { info = d; render(); })
+  .catch(() => { $('err').textContent = T[lang].eNo; $('send').disabled = true; });
+
+f.addEventListener('submit', async e => {
+  e.preventDefault();
+  const t = T[lang], v = n => f.elements[n].value.trim();
+  const menor = $('menor').checked;
+  $('err').textContent = '';
+  if (v('nombre').length < 2) return $('err').textContent = t.eNombre;
+  if (!$('acepto').checked) return $('err').textContent = t.eCons;
+  if (v('firma').length < 5) return $('err').textContent = t.eFirma;
+  if (menor && (!v('apNombre') || v('apFirma').length < 5)) return $('err').textContent = t.eApo;
+  $('send').disabled = true; $('send').textContent = t.sending;
+  try {
+    const r = await fetch('/api/ficha', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      r: token, nombre:v('nombre'), documento:v('documento'), nacimiento:v('nacimiento') || null, nacionalidad:v('nacionalidad'),
+      telefono:v('telefono'), correo:v('correo'), idioma:v('idioma'), emergenciaNombre:v('emergenciaNombre'), emergenciaTel:v('emergenciaTel'),
+      medico:v('medico'), menor, apoderado: menor ? { nombre:v('apNombre'), documento:v('apDoc'), firma:v('apFirma') } : null,
+      consentimiento:true, firma:v('firma')
+    })});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'x');
+    f.classList.add('hide'); $('resumen').classList.add('hide');
+    $('done').classList.remove('hide'); $('d_p').textContent = t.dP(d.fichas, d.personas);
+  } catch { $('err').textContent = t.eGen; $('send').disabled = false; $('send').textContent = t.send; }
+});
+render();
+</script>
+</body>
+</html>

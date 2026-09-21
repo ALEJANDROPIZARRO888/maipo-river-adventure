@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Reservas — Maipo River Adventure</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f2f2f3; --ink:#1d1f20; --accent:#5980a6; --accent7:#2f5478; --deep:#1d2d3d; --line:#c9ccd0; }
+  * { box-sizing:border-box; border-radius:0; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:400 14px/1.4 Barlow,system-ui,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  h1 { font:700 30px 'Barlow Condensed',sans-serif; text-transform:uppercase; margin:6px 0 12px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  input,select,button { min-height:44px; padding:0 12px; border:1px solid var(--line); background:#fff; font:500 14px Barlow; }
+  button { background:var(--accent); color:#fff; border:0; font:600 14px 'Barlow Condensed'; text-transform:uppercase; letter-spacing:.06em; cursor:pointer; }
+  button.ghost { background:none; color:var(--deep); border:1px solid var(--line); }
+  input:focus,select:focus,button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .card { position:relative; border:1px solid var(--line); padding:12px 14px; margin:14px 0; }
+  .card::before,.card::after { content:'+'; position:absolute; font:500 14px/1 Barlow; color:var(--accent); }
+  .card::before { top:-8px; left:-5px; } .card::after { bottom:-8px; right:-5px; }
+  .head { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .head b { font:600 19px 'Barlow Condensed'; text-transform:uppercase; }
+  .tag { font:600 11px Barlow; text-transform:uppercase; letter-spacing:.08em; color:var(--accent7); }
+  .muted { color:#5b6167; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  .prog { font-weight:600; }
+  #login { max-width:360px; margin:60px auto; }
+</style>
+</head>
+<body>
+<main>
+  <div id="login" class="card">
+    <h1>Panel de reservas</h1>
+    <p class="muted">Ingresa la clave de administración.</p>
+    <div class="bar"><input id="tok" type="password" placeholder="Clave" style="flex:1"><button id="go">Entrar</button></div>
+    <div id="lerr" style="color:#a12727"></div>
+  </div>
+  <div id="app" hidden>
+    <h1>Reservas</h1>
+    <div class="bar">
+      <select id="filtro"><option value="">Todas</option><option>nueva</option><option>confirmada</option><option>completada</option><option>cancelada</option></select>
+      <button class="ghost" id="reload">Actualizar</button>
+      <button class="ghost" id="out">Salir</button>
+    </div>
+    <div id="list"></div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let tok = ''; try { tok = sessionStorage.getItem('mra_admin') || ''; } catch {}
+const clp = n => '$' + Number(n).toLocaleString('es-CL');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function api(method, body) {
+  const r = await fetch('/api/reservas', { method, headers:{ Authorization:'Bearer '+tok, 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) throw new Error('401');
+  return r.json();
+}
+async function load() {
+  try {
+    const { reservas } = await api('GET');
+    $('login').hidden = true; $('app').hidden = false;
+    const fl = $('filtro').value;
+    const rows = reservas.filter(r => !fl || r.estado === fl);
+    $('list').innerHTML = rows.length ? rows.map(r => `
+      <div class="card">
+        <div class="head"><b>${esc(r.nombre)}</b><span class="tag">${esc(r.estado)}</span></div>
+        <div>${esc(String(r.fecha).slice(0,10))} · ${esc(r.horario)} · ${esc(r.tramo)}</div>
+        <div class="muted">${r.personas} ${r.personas===1?'persona':'personas'} · ${clp(r.monto)} estimado · ${esc(r.telefono)} · ${esc(r.correo)}</div>
+        <div class="prog">${r.fichas} de ${r.personas} fichas llenas</div>
+        ${r.comentarios ? `<div class="muted">“${esc(r.comentarios)}”</div>` : ''}
+        <div class="row">
+          <button data-id="${r.id}" data-e="confirmada">Confirmar</button>
+          <button class="ghost" data-id="${r.id}" data-e="completada">Completada</button>
+          <button class="ghost" data-id="${r.id}" data-e="cancelada">Cancelar</button>
+          <button class="ghost" data-copy="${location.origin}/ficha?r=${esc(r.token)}">Copiar link de ficha</button>
+          <a class="tag" href="https://wa.me/${String(r.telefono).replace(/\D/g,'')}?text=${encodeURIComponent('Hola ' + r.nombre + '! Tu reserva de rafting está confirmada. Completa la ficha de cada pasajero aquí: ' + location.origin + '/ficha?r=' + r.token)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+        </div>
+      </div>`).join('') : '<p class="muted">Aún no hay reservas con este filtro.</p>';
+  } catch (e) {
+    $('login').hidden = false; $('app').hidden = true;
+    if (tok) $('lerr').textContent = 'Clave incorrecta.';
+  }
+}
+$('go').onclick = () => { tok = $('tok').value; try { sessionStorage.setItem('mra_admin', tok); } catch {} load(); };
+$('reload').onclick = load; $('filtro').onchange = load;
+$('out').onclick = () => { tok=''; try { sessionStorage.removeItem('mra_admin'); } catch {} $('tok').value=''; load(); };
+$('list').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.copy) { try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copiado'; } catch {} return; }
+  await api('PATCH', { id: +b.dataset.id, estado: b.dataset.e }); load();
+});
+if (tok) load();
+setInterval(() => { if (!$('app').hidden) load(); }, 30000);
+</script>
+</body>
+</html>

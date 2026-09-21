@@ -55,7 +55,44 @@ export default async function handler(req, res) {
         returning id`;
       const planilla = await syncCupos(fecha, hora, personas);
       const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
-      return res.status(201).json({ ok: true, id: r.id, planilla, fichaUrl: `${base}/ficha?r=${token}` });
+      const fichaUrl = `${base}/ficha?r=${token}`;
+
+      // Correos: al cliente (si dejaron correo) y copia al administrador
+      const btn = (href, txt) => `<p style="margin:16px 0"><a href="${href}" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">${txt}</a></p>`;
+      const planH = esc(plan), nombreH = esc(nombre);
+      const resEs = `<p style="margin:14px 0 4px"><b>${fmtFecha(fecha, 'es')}</b> · ${esc(hora)} hrs<br>${personas} ${personas === 1 ? 'persona' : 'personas'} · ${planH}</p>`;
+      const resEn = `<p style="margin:14px 0 4px"><b>${fmtFecha(fecha, 'en')}</b> · ${esc(hora)}<br>${personas} ${personas === 1 ? 'person' : 'people'} · ${planH}</p>`;
+      const admin = process.env.ADMIN_EMAIL || 'maiporiveradventure@gmail.com';
+      const envios = [
+        sendMail({
+          to: admin,
+          subject: `Reserva manual #${r.id} — ${nombre} (${fecha} ${hora})`,
+          html: emailShell(`<h2 style="margin:8px 0">Reserva manual creada desde el panel</h2>
+            <p style="margin:0"><b>${nombreH}</b><br>${esc(telefono) || '-'} · ${esc(correo) || '-'}</p>
+            ${resEs}
+            <p style="margin:4px 0">Monto: <b>${clp(monto)}</b></p>
+            ${btn(`${base}/admin`, 'Abrir panel de reservas')}
+            <p style="font-size:13px;color:#5b6167">Link de ficha para los pasajeros:<br><a href="${fichaUrl}">${fichaUrl}</a></p>`)
+        })
+      ];
+      const correoOk = /^\S+@\S+\.\S+$/.test(correo);
+      if (correoOk) envios.push(sendMail({
+        to: correo,
+        replyTo: admin,
+        subject: 'Reserva confirmada / Booking confirmed — Maipo River Adventure',
+        html: emailShell(`<h2 style="margin:8px 0">Hola ${nombreH}, tu reserva está confirmada</h2>
+          ${resEs}
+          <p>Para agilizar el día, <b>cada pasajero</b> debe completar su ficha de seguridad:</p>
+          ${btn(fichaUrl, 'Completar ficha de seguridad')}
+          <hr style="border:0;border-top:1px solid #c9ccd0;margin:20px 0">
+          <h2 style="margin:8px 0">Hi ${nombreH}, your booking is confirmed</h2>
+          ${resEn}
+          <p>To speed things up on the day, <b>every passenger</b> must fill in the safety form:</p>
+          ${btn(fichaUrl, 'Fill in the safety form')}
+          <p style="font-size:13px;color:#5b6167">WhatsApp: <a href="https://wa.me/56976437931">+56 9 7643 7931</a></p>`)
+      }));
+      await Promise.allSettled(envios);
+      return res.status(201).json({ ok: true, id: r.id, planilla, correo: correoOk, fichaUrl });
     }
 
     // ---- Público: crear reserva desde la web

@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const t = String(req.query.r || '');
-      const [r] = await q`select id, nombre, fecha, horario, personas, tramo from reservas where token = ${t}`;
+      const [r] = await q`select id, nombre, fecha::text as fecha, horario, personas, tramo from reservas where token = ${t}`;
       if (!r) return res.status(404).json({ error: 'reserva no encontrada' });
       const [c] = await q`select count(*)::int as n from fichas where reserva_id = ${r.id}`;
       return res.status(200).json({ titular: r.nombre, fecha: r.fecha, horario: r.horario, personas: r.personas, tramo: r.tramo, fichas: c.n });

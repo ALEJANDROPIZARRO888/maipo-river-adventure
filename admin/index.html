@@ -27,6 +27,18 @@
   .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
   .prog { font-weight:600; }
   #login { max-width:360px; margin:60px auto; }
+  .tabs { display:flex; gap:0; border-bottom:1px solid var(--line); margin-bottom:12px; overflow-x:auto; }
+  .tabs button { background:none; color:var(--deep); border:0; border-bottom:3px solid transparent; min-height:44px; font-size:16px; }
+  .tabs button[aria-selected=true] { border-bottom-color:var(--accent); color:var(--accent7); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-bottom:12px; }
+  .stat { border:1px solid var(--line); padding:8px 10px; } .stat b { display:block; font:700 26px 'Barlow Condensed'; }
+  .st-nueva { color:#8a5a00; } .st-confirmada { color:#1e6b3a; } .st-cancelada { color:#a12727; } .st-completada { color:#5b6167; }
+  .card.cancelada { opacity:.55; }
+  label { display:block; font:600 12px Barlow; text-transform:uppercase; letter-spacing:.06em; margin:10px 0 4px; }
+  .form input,.form select { width:100%; } .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .msg { margin-top:10px; font-weight:600; } .ok { color:#1e6b3a; } .bad { color:#a12727; }
+  .bar-cap { height:10px; background:#e2e4e7; margin-top:4px; } .bar-cap i { display:block; height:100%; background:var(--accent); }
+  .warn { background:#fff4d6; border:1px solid #e0c060; padding:8px 10px; margin-bottom:12px; }
 </style>
 </head>
 <body>
@@ -38,62 +50,166 @@
     <div id="lerr" style="color:#a12727"></div>
   </div>
   <div id="app" hidden>
-    <h1>Reservas</h1>
-    <div class="bar">
-      <select id="filtro"><option value="">Todas</option><option>nueva</option><option>confirmada</option><option>completada</option><option>cancelada</option></select>
-      <button class="ghost" id="reload">Actualizar</button>
-      <button class="ghost" id="out">Salir</button>
+    <h1>Maipo River Adventure</h1>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="reservas" aria-selected="true">Reservas</button>
+      <button role="tab" data-tab="cupos" aria-selected="false">Cupos</button>
+      <button role="tab" data-tab="nueva" aria-selected="false">Nueva reserva</button>
+      <button role="tab" data-tab="clave" aria-selected="false">Clave</button>
+      <button role="tab" data-tab="salir" aria-selected="false">Salir</button>
     </div>
-    <div id="list"></div>
+    <div id="warn" class="warn" hidden></div>
+
+    <section id="t-reservas">
+      <div class="stats" id="stats"></div>
+      <div class="bar">
+        <input id="q" type="search" placeholder="Buscar nombre, teléfono o fecha" style="flex:1;min-width:180px">
+        <select id="filtro"><option value="">Todas</option><option value="activas" selected>Activas</option><option>nueva</option><option>confirmada</option><option>completada</option><option>cancelada</option></select>
+        <button class="ghost" id="reload">Actualizar</button>
+      </div>
+      <div id="list"></div>
+    </section>
+
+    <section id="t-cupos" hidden>
+      <p class="muted">Personas reservadas por salida (reservas activas del panel). Capacidad por salida: 14. La planilla de Google se ajusta sola al cancelar o crear reservas.</p>
+      <div id="cupos"></div>
+    </section>
+
+    <section id="t-nueva" hidden>
+      <p class="muted">Para reservas por teléfono, WhatsApp o presenciales. Queda confirmada y ocupa cupos en la planilla.</p>
+      <form id="fnueva" class="form card">
+        <label>Nombre del titular</label><input name="nombre" required>
+        <div class="grid2"><div><label>Teléfono</label><input name="telefono" inputmode="tel"></div><div><label>Correo (opcional)</label><input name="correo" type="email"></div></div>
+        <div class="grid2"><div><label>Fecha</label><input name="fecha" type="date" required></div>
+        <div><label>Salida</label><select name="horario"><option>11:00</option><option>14:00</option><option>17:00</option></select></div></div>
+        <div class="grid2"><div><label>Personas</label><input name="personas" type="number" min="1" max="60" value="2" required></div><div><label>Monto ($)</label><input name="monto" type="number" min="0" step="1000" value="0"></div></div>
+        <label>Plan / tramo</label><input name="plan" placeholder="Ej: Rafting Full">
+        <label>Comentarios</label><input name="comentarios">
+        <div class="row"><button type="submit">Crear reserva</button></div>
+        <div class="msg" id="nmsg"></div>
+      </form>
+    </section>
+
+    <section id="t-clave" hidden>
+      <p class="muted">Cambia la clave de este panel. Usa al menos 10 caracteres.</p>
+      <form id="fclave" class="form card">
+        <label>Clave nueva</label><input id="c1" type="password" autocomplete="new-password" minlength="10" required>
+        <label>Repite la clave nueva</label><input id="c2" type="password" autocomplete="new-password" minlength="10" required>
+        <div class="row"><button type="submit">Guardar clave nueva</button></div>
+        <div class="msg" id="cmsg"></div>
+      </form>
+    </section>
   </div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 let tok = ''; try { tok = sessionStorage.getItem('mra_admin') || ''; } catch {}
+let DATA = [];
 const clp = n => '$' + Number(n).toLocaleString('es-CL');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const DIAS = ['dom','lun','mar','mié','jue','vie','sáb'], MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const fdate = f => { const [y,m,d] = String(f).slice(0,10).split('-').map(Number); return DIAS[new Date(Date.UTC(y,m-1,d)).getUTCDay()] + ' ' + d + ' ' + MES[m-1] + ' ' + y; };
+const CAP = 14;
 
-async function api(method, body) {
-  const r = await fetch('/api/reservas', { method, headers:{ Authorization:'Bearer '+tok, 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined });
+async function api(method, body, path = '/api/reservas') {
+  const r = await fetch(path, { method, headers:{ Authorization:'Bearer '+tok, 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined });
   if (r.status === 401) throw new Error('401');
-  return r.json();
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
+  return j;
+}
+function show(tab) {
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
+  ['reservas','cupos','nueva','clave'].forEach(t => $('t-' + t).hidden = t !== tab);
+}
+function renderStats() {
+  const c = e => DATA.filter(r => r.estado === e).length;
+  const hoy = new Date().toISOString().slice(0,10);
+  const prox = DATA.filter(r => r.estado !== 'cancelada' && String(r.fecha).slice(0,10) >= hoy).reduce((a, r) => a + r.personas, 0);
+  $('stats').innerHTML = [['Nuevas', c('nueva')], ['Confirmadas', c('confirmada')], ['Personas próximas', prox], ['Canceladas', c('cancelada')]]
+    .map(([k, v]) => `<div class="stat"><b>${v}</b><span class="muted">${k}</span></div>`).join('');
+}
+function renderList() {
+  const fl = $('filtro').value, q = $('q').value.trim().toLowerCase();
+  const rows = DATA.filter(r => (fl === '' || (fl === 'activas' ? r.estado !== 'cancelada' && r.estado !== 'completada' : r.estado === fl))
+    && (!q || [r.nombre, r.telefono, r.correo, r.fecha, r.horario].join(' ').toLowerCase().includes(q)));
+  $('list').innerHTML = rows.length ? rows.map(r => `
+    <div class="card ${esc(r.estado)}">
+      <div class="head"><b>${esc(r.nombre)}</b><span class="tag st-${esc(r.estado)}">${esc(r.estado)}${r.origen === 'manual' ? ' · manual' : ''}</span></div>
+      <div><b>${esc(fdate(r.fecha))}</b> · ${esc(r.horario)} · ${esc(r.tramo)}</div>
+      <div class="muted">${r.personas} ${r.personas===1?'persona':'personas'} · ${clp(r.monto)} estimado · <a href="tel:${esc(r.telefono)}">${esc(r.telefono)}</a> · ${esc(r.correo)}</div>
+      <div class="prog">${r.fichas} de ${r.personas} fichas llenas</div>
+      ${r.comentarios ? `<div class="muted">“${esc(r.comentarios)}”</div>` : ''}
+      <div class="row">
+        ${r.estado !== 'confirmada' && r.estado !== 'cancelada' ? `<button data-id="${r.id}" data-e="confirmada">Confirmar</button>` : ''}
+        ${r.estado === 'confirmada' ? `<button class="ghost" data-id="${r.id}" data-e="completada">Completada</button>` : ''}
+        ${r.estado !== 'cancelada' ? `<button class="ghost" data-id="${r.id}" data-e="cancelada" data-n="${esc(r.nombre)}">Cancelar</button>` : `<button class="ghost" data-id="${r.id}" data-e="nueva">Reactivar</button>`}
+        <button class="ghost" data-copy="${location.origin}/ficha?r=${esc(r.token)}">Copiar link de ficha</button>
+        <a class="tag" href="https://wa.me/${String(r.telefono).replace(/\D/g,'')}?text=${encodeURIComponent('Hola ' + r.nombre + '! Tu reserva de rafting está confirmada. Completa la ficha de cada pasajero aquí: ' + location.origin + '/ficha?r=' + r.token)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+      </div>
+    </div>`).join('') : '<p class="muted">No hay reservas con este filtro.</p>';
+}
+function renderCupos() {
+  const hoy = new Date().toISOString().slice(0,10), m = {};
+  DATA.filter(r => r.estado !== 'cancelada' && String(r.fecha).slice(0,10) >= hoy).forEach(r => {
+    const f = String(r.fecha).slice(0,10); ((m[f] ||= {})[r.horario] ||= []).push(r);
+  });
+  const fechas = Object.keys(m).sort();
+  $('cupos').innerHTML = fechas.length ? fechas.map(f => `<div class="card"><div class="head"><b>${esc(fdate(f))}</b></div>` +
+    ['11:00','14:00','17:00'].map(h => { const rs = m[f][h] || [], n = rs.reduce((a, r) => a + r.personas, 0);
+      return `<div style="margin-top:8px"><span class="prog">${h}</span> · ${n} de ${CAP} · ${rs.length} ${rs.length===1?'reserva':'reservas'}<div class="bar-cap"><i style="width:${Math.min(100, n / CAP * 100)}%"></i></div></div>`; }).join('') + '</div>').join('')
+    : '<p class="muted">Aún no hay reservas próximas.</p>';
 }
 async function load() {
   try {
     const { reservas } = await api('GET');
-    $('login').hidden = true; $('app').hidden = false;
-    const fl = $('filtro').value;
-    const rows = reservas.filter(r => !fl || r.estado === fl);
-    $('list').innerHTML = rows.length ? rows.map(r => `
-      <div class="card">
-        <div class="head"><b>${esc(r.nombre)}</b><span class="tag">${esc(r.estado)}</span></div>
-        <div>${esc(String(r.fecha).slice(0,10))} · ${esc(r.horario)} · ${esc(r.tramo)}</div>
-        <div class="muted">${r.personas} ${r.personas===1?'persona':'personas'} · ${clp(r.monto)} estimado · ${esc(r.telefono)} · ${esc(r.correo)}</div>
-        <div class="prog">${r.fichas} de ${r.personas} fichas llenas</div>
-        ${r.comentarios ? `<div class="muted">“${esc(r.comentarios)}”</div>` : ''}
-        <div class="row">
-          <button data-id="${r.id}" data-e="confirmada">Confirmar</button>
-          <button class="ghost" data-id="${r.id}" data-e="completada">Completada</button>
-          <button class="ghost" data-id="${r.id}" data-e="cancelada">Cancelar</button>
-          <button class="ghost" data-copy="${location.origin}/ficha?r=${esc(r.token)}">Copiar link de ficha</button>
-          <a class="tag" href="https://wa.me/${String(r.telefono).replace(/\D/g,'')}?text=${encodeURIComponent('Hola ' + r.nombre + '! Tu reserva de rafting está confirmada. Completa la ficha de cada pasajero aquí: ' + location.origin + '/ficha?r=' + r.token)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
-        </div>
-      </div>`).join('') : '<p class="muted">Aún no hay reservas con este filtro.</p>';
+    DATA = reservas; $('login').hidden = true; $('app').hidden = false;
+    renderStats(); renderList(); renderCupos();
   } catch (e) {
     $('login').hidden = false; $('app').hidden = true;
     if (tok) $('lerr').textContent = 'Clave incorrecta.';
   }
 }
+function warn(t) { $('warn').textContent = t; $('warn').hidden = !t; }
 $('go').onclick = () => { tok = $('tok').value; try { sessionStorage.setItem('mra_admin', tok); } catch {} load(); };
-$('reload').onclick = load; $('filtro').onchange = load;
-$('out').onclick = () => { tok=''; try { sessionStorage.removeItem('mra_admin'); } catch {} $('tok').value=''; load(); };
+$('tok').addEventListener('keydown', e => { if (e.key === 'Enter') $('go').click(); });
+$('reload').onclick = load; $('filtro').onchange = renderList; $('q').oninput = renderList;
+document.querySelector('.tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tab === 'salir') { tok=''; try { sessionStorage.removeItem('mra_admin'); } catch {} $('tok').value=''; $('login').hidden = false; $('app').hidden = true; return; }
+  show(b.dataset.tab);
+});
 $('list').addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.copy) { try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copiado'; } catch {} return; }
-  await api('PATCH', { id: +b.dataset.id, estado: b.dataset.e }); load();
+  if (b.dataset.e === 'cancelada' && !confirm('¿Cancelar la reserva de ' + b.dataset.n + '? Se liberan sus cupos en la planilla.')) return;
+  try {
+    const r = await api('PATCH', { id: +b.dataset.id, estado: b.dataset.e });
+    warn(r.planilla === false ? 'La reserva cambió, pero la planilla de Google no respondió: revisa que SHEET_SYNC_KEY esté configurada en Vercel y ajusta el cupo a mano.' : '');
+  } catch (err) { warn(err.message); }
+  load();
+});
+$('fnueva').addEventListener('submit', async e => {
+  e.preventDefault(); const f = e.target, d = Object.fromEntries(new FormData(f)), m = $('nmsg');
+  m.className = 'msg'; m.textContent = 'Guardando…';
+  try {
+    const r = await api('POST', d);
+    m.className = 'msg ' + (r.planilla ? 'ok' : 'bad');
+    m.textContent = r.planilla ? 'Reserva #' + r.id + ' creada y cupos actualizados en la planilla.' : 'Reserva #' + r.id + ' creada, pero la planilla no respondió (revisa SHEET_SYNC_KEY).';
+    f.reset(); f.personas.value = 2; f.monto.value = 0; load();
+  } catch (err) { m.className = 'msg bad'; m.textContent = err.message; }
+});
+$('fclave').addEventListener('submit', async e => {
+  e.preventDefault(); const m = $('cmsg'); m.className = 'msg';
+  if ($('c1').value !== $('c2').value) { m.className += ' bad'; m.textContent = 'Las dos claves no coinciden.'; return; }
+  try {
+    await api('POST', { nueva: $('c1').value }, '/api/admin-clave');
+    tok = $('c1').value; try { sessionStorage.setItem('mra_admin', tok); } catch {}
+    m.className += ' ok'; m.textContent = 'Clave cambiada. Desde ahora usa la nueva.'; $('c1').value = $('c2').value = '';
+  } catch (err) { m.className += ' bad'; m.textContent = err.message; }
 });
 if (tok) load();
-setInterval(() => { if (!$('app').hidden) load(); }, 30000);
+setInterval(() => { if (!$('app').hidden && document.activeElement.tagName !== 'INPUT') load(); }, 30000);
 </script>
 </body>
 </html>

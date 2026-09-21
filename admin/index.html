@@ -54,6 +54,7 @@
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="reservas" aria-selected="true">Reservas</button>
       <button role="tab" data-tab="cupos" aria-selected="false">Cupos</button>
+      <button role="tab" data-tab="salidas" aria-selected="false">Salidas</button>
       <button role="tab" data-tab="nueva" aria-selected="false">Nueva reserva</button>
       <button role="tab" data-tab="fichas" aria-selected="false">Fichas</button>
       <button role="tab" data-tab="clave" aria-selected="false">Clave</button>
@@ -74,6 +75,17 @@
     <section id="t-cupos" hidden>
       <p class="muted">Personas reservadas por salida (reservas activas del panel). Capacidad por salida: 14. La planilla de Google se ajusta sola al cancelar o crear reservas.</p>
       <div id="cupos"></div>
+    </section>
+
+    <section id="t-salidas" hidden>
+      <p class="muted">Cada salida junta las reservas y fichas de su horario. Reparte a los pasajeros en las balsas (capacidad por salida: 14).</p>
+      <div class="bar">
+        <button class="ghost" id="dprev" aria-label="Día anterior">‹</button>
+        <input id="dsal" type="date" style="flex:1;min-width:150px">
+        <button class="ghost" id="dnext" aria-label="Día siguiente">›</button>
+        <button class="ghost" id="dhoy">Hoy</button>
+      </div>
+      <div id="salidas"></div>
     </section>
 
     <section id="t-nueva" hidden>
@@ -126,7 +138,7 @@ async function api(method, body, path = '/api/reservas') {
 }
 function show(tab) {
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ['reservas','cupos','nueva','fichas','clave'].forEach(t => $('t-' + t).hidden = t !== tab);
+  ['reservas','cupos','salidas','nueva','fichas','clave'].forEach(t => $('t-' + t).hidden = t !== tab);
 }
 function renderStats() {
   const c = e => DATA.filter(r => r.estado === e).length;
@@ -196,6 +208,93 @@ function renderFichas() {
     </div>`).join('') : '<p class="muted">Aún no hay fichas.</p>';
 }
 $('qf').oninput = renderFichas; $('reloadf').onclick = loadFichas;
+
+// ---- Salidas: reservas y fichas de cada horario, repartidas en balsas
+const TRAMOS = { san_alfonso_melocoton: 'San Alfonso — Melocotón', melocoton_san_jose: 'Melocotón — San José', seccion_completa: 'Sección completa' };
+const ALERTAS = {
+  sobrecupo: 'Hay más personas reservadas que cupos en esta salida.',
+  choque_seccion_completa: 'La sección completa sale a las 11:00 y ocupa el día, pero hay otra salida o reserva ese mismo día.'
+};
+const hoyCL = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Santiago' });
+let SAL = null;
+async function loadSalidas() {
+  const d = $('dsal').value; if (!d) return;
+  try {
+    const r = await api('GET', null, '/api/bajadas?fecha=' + d);
+    if (d !== $('dsal').value) return; // cambió de día mientras cargaba
+    SAL = r; renderSalidas();
+  } catch (e) { $('salidas').innerHTML = '<p class="muted">No se pudieron cargar las salidas.</p>'; }
+}
+function fichaRow(f, s) {
+  const medico = f.medico && !/^(ninguna|none)$/i.test(f.medico.trim());
+  const tags = [f.menor ? 'MENOR' : '', f.sabe_nadar === false ? 'NO SABE NADAR' : '', medico ? 'MÉDICO' : ''].filter(Boolean).join(' · ');
+  return `<div class="row" style="justify-content:space-between;margin:4px 0">
+    <span><b>${esc(f.nombre)}</b> <span class="muted">${f.edad ?? '?'} años · ${esc(f.idioma || '')}</span>${tags ? ` <span class="tag">${tags}</span>` : ''}${medico ? `<br><span class="muted">${esc(f.medico)}</span>` : ''}</span>
+    <select data-ficha="${f.id}" aria-label="Balsa de ${esc(f.nombre)}"><option value="">Sin balsa</option>${s.botes.map(b => `<option value="${b.id}"${f.bote_id === b.id ? ' selected' : ''}>${esc(b.nombre)} (${b.fichas.length}/${b.capacidad})</option>`).join('')}</select>
+  </div>`;
+}
+function renderSalidas() {
+  const { salidas, sinSalida } = SAL;
+  const cards = salidas.length ? salidas.map(s => {
+    const tr = Object.entries(s.porTramo);
+    const titulo = s.tramoEtiqueta || (tr.length > 1 ? 'Salida mixta' : 'Tramo por confirmar');
+    return `
+    <div class="card${s.estado === 'suspendida' ? ' cancelada' : ''}" data-sid="${s.id}">
+      <div class="head"><b>${esc(s.horario)} · ${esc(titulo)}</b><span class="tag">${esc(s.estado)}</span></div>
+      <div class="prog">${s.reservadas} de ${s.cupo} cupos · ${s.fichas} ${s.fichas === 1 ? 'ficha llena' : 'fichas llenas'}</div>
+      ${tr.length ? `<div class="muted">${tr.map(([k, n]) => n + ' en ' + esc(TRAMOS[k])).join(' · ')}</div>` : ''}
+      <div class="bar-cap"><i style="width:${Math.min(100, s.reservadas / s.cupo * 100)}%"></i></div>
+      ${s.alertas.map(a => `<div class="warn" style="margin:8px 0 0">${esc(ALERTAS[a] || a)}</div>`).join('')}
+      <div class="row">
+        <select data-tramo="${s.id}" aria-label="Tramo"><option value="">Tramo por confirmar</option>${Object.entries(TRAMOS).map(([k, v]) => `<option value="${k}"${s.tramo === k ? ' selected' : ''}>${v}</option>`).join('')}</select>
+        ${s.estado === 'borrador' ? `<button data-est="lista" data-sid="${s.id}">Marcar lista</button>` : ''}
+        ${s.estado === 'lista' ? `<button class="ghost" data-est="borrador" data-sid="${s.id}">Volver a borrador</button>` : ''}
+        ${s.estado === 'suspendida' ? `<button class="ghost" data-est="borrador" data-sid="${s.id}">Reactivar</button>` : `<button class="ghost" data-est="suspendida" data-sid="${s.id}">Suspender</button>`}
+        <button class="ghost" data-balsas="${s.id}" data-cap="${esc(s.botes.map(b => b.capacidad).join(','))}">Cambiar balsas</button>
+      </div>
+      <p class="tag" style="margin:12px 0 2px">Reservas</p>
+      ${s.reservas.map(r => `<div class="${r.estado === 'cancelada' ? 'muted' : ''}"><b>${esc(r.nombre)}</b> · ${r.personas} ${r.personas === 1 ? 'persona' : 'personas'} · ${r.fichas} de ${r.personas} fichas · ${esc(r.tramo)} · <span class="st-${esc(r.estado)}">${esc(r.estado)}</span></div>`).join('')}
+      <p class="tag" style="margin:12px 0 2px">Balsas</p>
+      ${s.botes.map(b => `<div style="margin:6px 0 2px"><b>${esc(b.nombre)}</b> · ${b.fichas.length} de ${b.capacidad}</div>${b.fichas.length ? b.fichas.map(f => fichaRow(f, s)).join('') : '<div class="muted">Nadie asignado todavía.</div>'}`).join('')}
+      <p class="tag" style="margin:12px 0 2px">Sin balsa (${s.sinBote.length})</p>
+      ${s.sinBote.length ? s.sinBote.map(f => fichaRow(f, s)).join('') : '<div class="muted">Todos los pasajeros con ficha tienen balsa.</div>'}
+    </div>`; }).join('') : '<p class="muted">No hay salidas este día: aparecen solas cuando hay reservas de rafting.</p>';
+  const libres = sinSalida.length ? `<div class="card"><div class="head"><b>Fichas sin salida (${sinSalida.length})</b></div>
+    <p class="muted">Fichas que llegaron por QR sin reserva. Asígnalas a una salida de este día.</p>
+    ${sinSalida.map(f => `<div class="row" style="justify-content:space-between;margin:4px 0"><span><b>${esc(f.nombre)}</b> <span class="muted">${f.edad ?? '?'} años${f.salida ? ' · ' + esc(f.salida) : ''}</span></span>
+      ${salidas.length ? `<select data-asig="${f.id}" aria-label="Salida de ${esc(f.nombre)}"><option value="">Asignar a…</option>${salidas.map(s => `<option value="${s.id}">${esc(s.horario)}${s.tramoEtiqueta ? ' · ' + esc(s.tramoEtiqueta) : ''}</option>`).join('')}</select>` : ''}</div>`).join('')}
+  </div>` : '';
+  $('salidas').innerHTML = cards + libres;
+}
+const mover = n => { const [y, m, d] = $('dsal').value.split('-').map(Number); $('dsal').value = new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); loadSalidas(); };
+$('dprev').onclick = () => mover(-1); $('dnext').onclick = () => mover(1);
+$('dhoy').onclick = () => { $('dsal').value = hoyCL(); loadSalidas(); }; $('dsal').onchange = loadSalidas;
+$('salidas').addEventListener('change', async e => {
+  const t = e.target;
+  try {
+    if (t.dataset.ficha) await api('PATCH', { id: +t.dataset.ficha, bote_id: t.value ? +t.value : null }, '/api/ficha');
+    else if (t.dataset.asig) { if (!t.value) return; await api('PATCH', { id: +t.dataset.asig, bajada_id: +t.value }, '/api/ficha'); }
+    else if (t.dataset.tramo) await api('PATCH', { id: +t.dataset.tramo, tramo: t.value || null }, '/api/bajadas');
+    else return;
+    warn('');
+  } catch (err) { warn(err.message); }
+  loadSalidas();
+});
+$('salidas').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  try {
+    if (b.dataset.est) {
+      if (b.dataset.est === 'suspendida' && !confirm('¿Suspender esta salida? Solo la marca en el panel: aún no avisa a los clientes, hazlo por WhatsApp.')) return;
+      await api('PATCH', { id: +b.dataset.sid, estado: b.dataset.est }, '/api/bajadas');
+    } else if (b.dataset.balsas) {
+      const v = prompt('Plazas de cada balsa, separadas por coma (ej: 8,6):', b.dataset.cap); if (v === null) return;
+      const botes = v.split(',').map(x => x.trim()).filter(Boolean).map((c, i) => ({ nombre: 'Balsa ' + (i + 1), capacidad: c }));
+      await api('PATCH', { id: +b.dataset.balsas, botes }, '/api/bajadas');
+    } else return;
+    warn('');
+  } catch (err) { warn(err.message); }
+  loadSalidas();
+});
 function warn(t) { $('warn').textContent = t; $('warn').hidden = !t; }
 $('go').onclick = () => { tok = $('tok').value; try { sessionStorage.setItem('mra_admin', tok); } catch {} load(); };
 $('tok').addEventListener('keydown', e => { if (e.key === 'Enter') $('go').click(); });
@@ -205,6 +304,7 @@ document.querySelector('.tabs').addEventListener('click', e => {
   if (b.dataset.tab === 'salir') { tok=''; try { sessionStorage.removeItem('mra_admin'); } catch {} $('tok').value=''; $('login').hidden = false; $('app').hidden = true; return; }
   show(b.dataset.tab);
   if (b.dataset.tab === 'fichas') loadFichas();
+  if (b.dataset.tab === 'salidas') { if (!$('dsal').value) $('dsal').value = hoyCL(); loadSalidas(); }
 });
 $('list').addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -237,6 +337,11 @@ $('fclave').addEventListener('submit', async e => {
 });
 if (tok) load();
 setInterval(() => { if (!$('app').hidden && document.activeElement.tagName !== 'INPUT') load(); }, 30000);
+// Salidas casi en vivo: llegan fichas y reservas mientras el admin arma las balsas. No refresca si está usando un campo o la pestaña está oculta.
+setInterval(() => {
+  if ($('app').hidden || $('t-salidas').hidden || document.hidden || ['INPUT', 'SELECT'].includes(document.activeElement.tagName)) return;
+  loadSalidas();
+}, 8000);
 </script>
 </body>
 </html>

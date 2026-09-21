@@ -4,9 +4,13 @@ import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 
 let _db;
 export function db() {
+  if (_db) return _db;
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL no configurada');
-  return (_db ||= neon(process.env.DATABASE_URL));
+  return (_db = neon(process.env.DATABASE_URL));
 }
+
+// Solo para pruebas: reemplaza el cliente de base de datos (por ejemplo por una base en memoria).
+export function useDb(q) { _db = q; }
 
 let _ready;
 export function ensureSchema() {

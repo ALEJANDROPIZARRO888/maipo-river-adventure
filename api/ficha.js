@@ -1,4 +1,5 @@
 import { db, ensureSchema, cors, isAdmin, body, clientIp, sendMail, esc, fmtFecha, emailShell } from './_lib.js';
+import { ensureBajadas } from './_bajadas.js';
 
 const MAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
@@ -39,6 +40,41 @@ export default async function handler(req, res) {
       if (!r) return res.status(404).json({ error: 'reserva no encontrada' });
       const [c] = await q`select count(*)::int as n from fichas where reserva_id = ${r.id}`;
       return res.status(200).json({ titular: r.nombre, fecha: r.fecha, horario: r.horario, personas: r.personas, tramo: r.tramo, fichas: c.n });
+    }
+
+    // Admin: asignar una ficha a una salida (las fichas con reserva ya heredan la de su reserva) y a una balsa
+    if (req.method === 'PATCH') {
+      await ensureBajadas();
+      if (!(await isAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
+      const b = await body(req);
+      const id = parseInt(b.id, 10);
+      const [f] = id > 0 ? await q`select f.bajada_id, f.bote_id, r.bajada_id as rbajada from fichas f left join reservas r on r.id = f.reserva_id where f.id = ${id}` : [];
+      if (!f) return res.status(404).json({ error: 'la ficha no existe' });
+
+      const bajada = 'bajada_id' in b ? (b.bajada_id == null ? null : parseInt(b.bajada_id, 10)) : f.bajada_id;
+      if (bajada !== null) {
+        if (!(bajada > 0)) return res.status(400).json({ error: 'salida inválida' });
+        const [s] = await q`select id from bajadas where id = ${bajada}`;
+        if (!s) return res.status(404).json({ error: 'la salida no existe' });
+      }
+      const efectiva = bajada ?? f.rbajada;
+
+      const pedida = 'bote_id' in b;
+      let bote = pedida ? (b.bote_id == null ? null : parseInt(b.bote_id, 10)) : f.bote_id;
+      if (bote !== null) {
+        if (!(bote > 0)) return res.status(400).json({ error: 'balsa inválida' });
+        const [x] = await q`select bajada_id, nombre, capacidad, (select count(*)::int from fichas where bote_id = botes.id and id <> ${id}) as ocupados
+          from botes where id = ${bote}`;
+        if (!x) return res.status(404).json({ error: 'la balsa no existe' });
+        if (x.bajada_id !== efectiva) {
+          if (pedida) return res.status(409).json({ error: 'Esa balsa es de otra salida.' });
+          bote = null; // cambió de salida: pierde la balsa que tenía
+        } else if (x.ocupados >= x.capacidad) {
+          return res.status(409).json({ error: `${x.nombre} ya está llena (${x.capacidad} de ${x.capacidad}).` });
+        }
+      }
+      await q`update fichas set bajada_id = ${bajada}, bote_id = ${bote} where id = ${id}`;
+      return res.status(200).json({ ok: true });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });

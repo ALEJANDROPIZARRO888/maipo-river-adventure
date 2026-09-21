@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { db, ensureSchema, cors, isAdmin, body, sendMail, planInfo, horaSalida, esc, fmtFecha, clp, emailShell, syncCupos } from './_lib.js';
+import { db, ensureSchema, cors, body, sendMail, planInfo, horaSalida, esc, fmtFecha, clp, emailShell, syncCupos } from './_lib.js';
+import { esAdmin } from './_auth.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -9,7 +10,7 @@ export default async function handler(req, res) {
 
     // ---- Admin: listar reservas con progreso de fichas
     if (req.method === 'GET') {
-      if (!(await isAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
+      if (!(await esAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
       const rows = await q`
         select r.id, r.creada, r.token, r.nombre, r.telefono, r.correo, r.fecha::text as fecha,
                r.horario, r.personas, r.plan, r.tramo, r.monto, r.comentarios, r.estado, r.origen,
@@ -20,7 +21,7 @@ export default async function handler(req, res) {
 
     // ---- Admin: cambiar estado (cancelar libera cupos en la planilla; reactivar los vuelve a ocupar)
     if (req.method === 'PATCH') {
-      if (!(await isAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
+      if (!(await esAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
       const b = await body(req);
       const ok = ['nueva', 'confirmada', 'cancelada', 'completada'];
       if (!b.id || !ok.includes(b.estado)) return res.status(400).json({ error: 'datos inválidos' });
@@ -60,7 +61,7 @@ export default async function handler(req, res) {
     }
 
     // ---- Admin: reserva manual (teléfono, WhatsApp, presencial) — ocupa cupos en la planilla
-    if (req.method === 'POST' && (await isAdmin(req))) {
+    if (req.method === 'POST' && (await esAdmin(req))) {
       const b = await body(req);
       const nombre = String(b.nombre || '').trim();
       const telefono = String(b.telefono || '').trim();

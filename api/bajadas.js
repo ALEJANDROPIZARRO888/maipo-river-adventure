@@ -1,4 +1,5 @@
-import { db, cors, isAdmin, body } from './_lib.js';
+import { db, cors, body } from './_lib.js';
+import { esAdmin } from './_auth.js';
 import { ensureBajadas, materializar, salidasDe, TRAMOS, ESTADOS_EDITABLES } from './_bajadas.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -8,7 +9,7 @@ export default async function handler(req, res) {
   if (cors(req, res)) return;
   try {
     await ensureBajadas();
-    if (!(await isAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
+    if (!(await esAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
     const q = db();
 
     // ---- Salidas de un día (?fecha=) o de un rango (?desde=&hasta=), con reservas, balsas y fichas

@@ -6,6 +6,13 @@
     { "source": "/admin", "headers": [
       { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
       { "key": "Cache-Control", "value": "no-store" } ] },
+    { "source": "/app", "headers": [
+      { "key": "X-Robots-Tag", "value": "noindex, nofollow" } ] },
+    { "source": "/app/(.*)", "headers": [
+      { "key": "X-Robots-Tag", "value": "noindex, nofollow" } ] },
+    { "source": "/app/sw.js", "headers": [
+      { "key": "Cache-Control", "value": "no-cache" },
+      { "key": "Service-Worker-Allowed", "value": "/app/" } ] },
     { "source": "/fichapasajero", "headers": [
       { "key": "X-Robots-Tag", "value": "noindex, nofollow" } ] },
     { "source": "/api/(.*)", "headers": [

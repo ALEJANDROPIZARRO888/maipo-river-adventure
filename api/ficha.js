@@ -1,5 +1,6 @@
-import { db, ensureSchema, cors, isAdmin, body, clientIp, sendMail, esc, fmtFecha, emailShell } from './_lib.js';
+import { db, ensureSchema, cors, body, clientIp, sendMail, esc, fmtFecha, emailShell } from './_lib.js';
 import { ensureBajadas } from './_bajadas.js';
+import { esAdmin } from './_auth.js';
 
 const MAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
@@ -25,7 +26,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       // Admin: todas las fichas (las más nuevas primero)
       if (req.query.lista) {
-        if (!(await isAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
+        if (!(await esAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
         const fichas = await q`
           select f.id, f.creada, f.nombre, f.documento, f.nacimiento::text as nacimiento, f.edad, f.telefono, f.correo,
                  f.nacionalidad, f.idioma, f.emergencia_nombre, f.medico, f.menor, f.apoderado, f.sabe_nadar, f.uso_imagen,
@@ -45,7 +46,7 @@ export default async function handler(req, res) {
     // Admin: asignar una ficha a una salida (las fichas con reserva ya heredan la de su reserva) y a una balsa
     if (req.method === 'PATCH') {
       await ensureBajadas();
-      if (!(await isAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
+      if (!(await esAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
       const b = await body(req);
       const id = parseInt(b.id, 10);
       const [f] = id > 0 ? await q`select f.bajada_id, f.bote_id, r.bajada_id as rbajada from fichas f left join reservas r on r.id = f.reserva_id where f.id = ${id}` : [];

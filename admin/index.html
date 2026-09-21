@@ -55,6 +55,7 @@
       <button role="tab" data-tab="reservas" aria-selected="true">Reservas</button>
       <button role="tab" data-tab="cupos" aria-selected="false">Cupos</button>
       <button role="tab" data-tab="nueva" aria-selected="false">Nueva reserva</button>
+      <button role="tab" data-tab="fichas" aria-selected="false">Fichas</button>
       <button role="tab" data-tab="clave" aria-selected="false">Clave</button>
       <button role="tab" data-tab="salir" aria-selected="false">Salir</button>
     </div>
@@ -90,6 +91,11 @@
       </form>
     </section>
 
+    <section id="t-fichas" hidden>
+      <div class="bar"><input id="qf" type="search" placeholder="Buscar pasajero, documento o salida" style="flex:1;min-width:180px"><button class="ghost" id="reloadf">Actualizar</button></div>
+      <div id="fichas"></div>
+    </section>
+
     <section id="t-clave" hidden>
       <p class="muted">Cambia la clave de este panel. Usa al menos 10 caracteres.</p>
       <form id="fclave" class="form card">
@@ -120,7 +126,7 @@ async function api(method, body, path = '/api/reservas') {
 }
 function show(tab) {
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
-  ['reservas','cupos','nueva','clave'].forEach(t => $('t-' + t).hidden = t !== tab);
+  ['reservas','cupos','nueva','fichas','clave'].forEach(t => $('t-' + t).hidden = t !== tab);
 }
 function renderStats() {
   const c = e => DATA.filter(r => r.estado === e).length;
@@ -144,8 +150,8 @@ function renderList() {
         ${r.estado !== 'confirmada' && r.estado !== 'cancelada' ? `<button data-id="${r.id}" data-e="confirmada">Confirmar</button>` : ''}
         ${r.estado === 'confirmada' ? `<button class="ghost" data-id="${r.id}" data-e="completada">Completada</button>` : ''}
         ${r.estado !== 'cancelada' ? `<button class="ghost" data-id="${r.id}" data-e="cancelada" data-n="${esc(r.nombre)}">Cancelar</button>` : `<button class="ghost" data-id="${r.id}" data-e="nueva">Reactivar</button>`}
-        <button class="ghost" data-copy="${location.origin}/ficha?r=${esc(r.token)}">Copiar link de ficha</button>
-        <a class="tag" href="https://wa.me/${String(r.telefono).replace(/\D/g,'')}?text=${encodeURIComponent('Hola ' + r.nombre + '! Tu reserva de rafting está confirmada. Completa la ficha de cada pasajero aquí: ' + location.origin + '/ficha?r=' + r.token)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+        <button class="ghost" data-copy="${location.origin}/fichapasajero?r=${esc(r.token)}">Copiar link de ficha</button>
+        <a class="tag" href="https://wa.me/${String(r.telefono).replace(/\D/g,'')}?text=${encodeURIComponent('Hola ' + r.nombre + '! Tu reserva de rafting está confirmada. Completa la ficha de cada pasajero aquí: ' + location.origin + '/fichapasajero?r=' + r.token)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
       </div>
     </div>`).join('') : '<p class="muted">No hay reservas con este filtro.</p>';
 }
@@ -170,6 +176,26 @@ async function load() {
     if (tok) $('lerr').textContent = 'Clave incorrecta.';
   }
 }
+let FICHAS = [];
+async function loadFichas() {
+  try { FICHAS = (await api('GET', null, '/api/ficha?lista=1')).fichas; renderFichas(); }
+  catch (e) { $('fichas').innerHTML = '<p class="muted">No se pudieron cargar las fichas.</p>'; }
+}
+function renderFichas() {
+  const q = $('qf').value.trim().toLowerCase();
+  const rows = FICHAS.filter(f => !q || [f.nombre, f.documento, f.salida, f.titular, f.correo, f.telefono].join(' ').toLowerCase().includes(q));
+  $('fichas').innerHTML = rows.length ? rows.map(f => `
+    <div class="card">
+      <div class="head"><b>${esc(f.nombre)}</b><span class="tag">${f.menor ? 'MENOR · ' : ''}${f.sabe_nadar === false ? 'NO SABE NADAR' : ''}</span></div>
+      <div>${f.fecha ? '<b>' + esc(fdate(f.fecha)) + '</b> · ' + esc(f.horario) + ' · reserva de ' + esc(f.titular) : (f.salida ? esc(f.salida) : 'Ficha libre (sin reserva)')}${f.tramo ? ' · ' + esc(f.tramo) : ''}</div>
+      <div class="muted">${esc(f.documento)} · ${f.edad ?? '?'} años · ${esc(f.nacionalidad || '-')} · ${esc(f.idioma || '')} · <a href="tel:${esc(f.telefono)}">${esc(f.telefono)}</a> · ${esc(f.correo)}</div>
+      <div><span class="prog">Emergencia:</span> ${esc(f.emergencia_nombre || '-')}</div>
+      <div><span class="prog">Médico:</span> ${esc(f.medico || '-')}</div>
+      ${f.menor && f.apoderado ? `<div><span class="prog">Apoderado:</span> ${esc(f.apoderado.nombre)} — ${esc(f.apoderado.rut)}</div>` : ''}
+      <div class="muted">Imagen: ${f.uso_imagen ? 'autoriza' : 'NO autoriza'} · Firmó: ${esc(f.firma)} · ${esc(new Date(f.creada).toLocaleString('es-CL'))}</div>
+    </div>`).join('') : '<p class="muted">Aún no hay fichas.</p>';
+}
+$('qf').oninput = renderFichas; $('reloadf').onclick = loadFichas;
 function warn(t) { $('warn').textContent = t; $('warn').hidden = !t; }
 $('go').onclick = () => { tok = $('tok').value; try { sessionStorage.setItem('mra_admin', tok); } catch {} load(); };
 $('tok').addEventListener('keydown', e => { if (e.key === 'Enter') $('go').click(); });
@@ -178,6 +204,7 @@ document.querySelector('.tabs').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.tab === 'salir') { tok=''; try { sessionStorage.removeItem('mra_admin'); } catch {} $('tok').value=''; $('login').hidden = false; $('app').hidden = true; return; }
   show(b.dataset.tab);
+  if (b.dataset.tab === 'fichas') loadFichas();
 });
 $('list').addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;

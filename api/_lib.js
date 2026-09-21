@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import nodemailer from 'nodemailer';
+import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 
 let _db;
 export function db() {
@@ -48,6 +49,8 @@ export function ensureSchema() {
       firma text not null,
       ip text
     )`;
+    await q`create table if not exists config (k text primary key, v text not null)`;
+    await q`alter table reservas add column if not exists cupo_sync boolean not null default false`;
   })());
 }
 
@@ -59,9 +62,25 @@ export function cors(req, res) {
   return false;
 }
 
-export function isAdmin(req) {
+// Clave de administración: si se cambió desde el panel, vale la guardada (hash scrypt en la tabla config);
+// si nunca se cambió, vale ADMIN_TOKEN (variable de Vercel).
+export async function isAdmin(req) {
   const t = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!t) return false;
+  const [row] = await db()`select v from config where k = 'admin_hash'`;
+  if (row) {
+    const [salt, hash] = row.v.split(':');
+    const cand = scryptSync(t, Buffer.from(salt, 'hex'), 32);
+    const real = Buffer.from(hash, 'hex');
+    return cand.length === real.length && timingSafeEqual(cand, real);
+  }
   return !!process.env.ADMIN_TOKEN && t === process.env.ADMIN_TOKEN;
+}
+
+export async function setAdminPassword(pw) {
+  const salt = randomBytes(16);
+  const v = salt.toString('hex') + ':' + scryptSync(pw, salt, 32).toString('hex');
+  await db()`insert into config (k, v) values ('admin_hash', ${v}) on conflict (k) do update set v = excluded.v`;
 }
 
 export function clientIp(req) {
@@ -155,3 +174,26 @@ export function horaSalida(h = '') {
 }
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ---- Sincronización de cupos con la planilla Google (Apps Script).
+// Suma/resta `delta` personas a RESERVADOS de (fecha, horario). Devuelve true si la planilla confirmó.
+const APPS_SCRIPT_URL = () => process.env.APPS_SCRIPT_URL ||
+  'https://script.google.com/macros/s/AKfycbwoIxVXpwzK5aIzoVXqcHUGtwCL1BgFHKHTCzyCsxRQuxY1ZKcKKgOMUPY7NFBx7rCa/exec';
+
+export async function syncCupos(fecha, horario, delta) {
+  const key = process.env.SHEET_SYNC_KEY;
+  if (!key || !delta) return false;
+  try {
+    const r = await fetch(APPS_SCRIPT_URL(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'ajustar', key, fecha: String(fecha).slice(0, 10), horario, delta }),
+      redirect: 'follow'
+    });
+    const j = await r.json();
+    return j.ok === true;
+  } catch (e) {
+    console.error('syncCupos error', e);
+    return false;
+  }
+}

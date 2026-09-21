@@ -221,7 +221,19 @@
     return true;
   }
 
+  // Guarda la reserva en el backend propio (panel admin + ficha QR). Nunca bloquea la reserva.
+  function postApi() {
+    try {
+      fetch('/api/reservas', {
+        method: 'POST', keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields())
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   function postEmail() {
+    postApi();
     var d = fields();
     return fetch('https://formsubmit.co/ajax/' + encodeURIComponent(EMAIL), {
       method: 'POST',

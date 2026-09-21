@@ -1,7 +1,7 @@
 import { db, cors, body, clientIp, sendMail, esc, isAdmin, emailShell, clp, fmtFecha } from './_lib.js';
 import { ensureApp, cuentaDe, firmar, hashClave, claveOk, claveTemporal, bloqueado, registrarFallo, limpiarFallos, usuarioLibre, hoyCL } from './_auth.js';
 import { materializar, salidasDe, TRAMOS } from './_bajadas.js';
-import { tarifa, puestosDe, distribuirFichas, elegirPersonal, choque, resumenPago, balsasNecesarias, FUNCIONES, NOMBRE_FUNCION } from './_auto.js';
+import { tarifa, puestosDe, distribuirFichas, elegirPersonal, choque, resumenPago, balsasNecesarias, tieneCondicion, FUNCIONES, NOMBRE_FUNCION } from './_auto.js';
 import { notificar } from './_notif.js';
 import { vapid, suscripcionValida, guardarSuscripcion, borrarSuscripcion, enviarPush } from './_push.js';
 
@@ -10,6 +10,10 @@ import { vapid, suscripcionValida, guardarSuscripcion, borrarSuscripcion, enviar
 class Fallo extends Error { constructor(estado, msg, extra = {}) { super(msg); this.estado = estado; this.extra = extra; } }
 const FECHA = /^\d{4}-\d{2}-\d{2}$/, MAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
+// Espera a `p` como máximo `ms`; si tarda más devuelve false (para no colgar una respuesta por un servicio lento).
+const conTope = (p, ms) => Promise.race([p.catch(() => false), new Promise(r => setTimeout(() => r(false), ms))]);
+// Los trabajadores ven los datos de los pasajeros de una bajada cerrada solo unos días (el resto es de la operación del admin).
+const DIAS_DATOS_PASAJEROS = 3;
 const etiquetaPuesto = (puesto, bote) => bote || (puesto.startsWith('kayak:') ? 'Kayak ' + puesto.slice(6) : 'Traslado y fotos');
 const fechaCorta = f => fmtFecha(f, 'es').replace(/ de \d{4}$/, '');
 const publica = c => ({ id: c.id, tipo: c.tipo, usuario: c.usuario, nombre: c.nombre, correo: c.correo, telefono: c.telefono, es_maestra: c.es_maestra, verificada: c.verificada, funciones: c.funciones });
@@ -127,12 +131,14 @@ async function turno({ q, yo, query }) {
   const [t] = id > 0 ? await q`select t.*, b.fecha::text as fecha, b.horario, b.tramo, b.estado as bajada_estado, bo.nombre as bote, bo.capacidad as bote_cap
       from turnos t join bajadas b on b.id = t.bajada_id left join botes bo on bo.id = t.bote_id where t.id = ${id}` : [];
   if (!t || (yo.tipo !== 'admin' && t.trabajador_id !== yo.id)) throw new Fallo(404, 'El turno no existe.');
-  const abierto = yo.tipo === 'admin' || ['aceptado', 'cerrado', 'pagado'].includes(t.estado); // los datos de pasajeros solo tras aceptar
+  // Los datos de pasajeros (emergencia, salud, teléfono) solo tras aceptar, y una vez cerrada la bajada solo por unos días.
+  const limite = new Date(Date.parse(hoyCL()) - DIAS_DATOS_PASAJEROS * 864e5).toISOString().slice(0, 10);
+  const abierto = yo.tipo === 'admin' || t.estado === 'aceptado' || (['cerrado', 'pagado'].includes(t.estado) && t.fecha >= limite);
   const equipo = await q`select tt.puesto, tt.funcion, tt.estado, c.nombre, bo.nombre as bote from turnos tt join cuentas c on c.id = tt.trabajador_id
     left join botes bo on bo.id = tt.bote_id where tt.bajada_id = ${t.bajada_id} and tt.estado not in ('borrador', 'rechazado') order by tt.id`;
   const salida = { turno: { ...t, etiqueta: etiquetaPuesto(t.puesto, t.bote), tramoEtiqueta: TRAMOS[t.tramo] || null, funcionNombre: NOMBRE_FUNCION[t.funcion] },
     equipo: equipo.map(e => ({ nombre: e.nombre, funcion: e.funcion, etiqueta: etiquetaPuesto(e.puesto, e.bote), estado: e.estado })) };
-  if (!abierto) return salida;
+  if (!abierto) { salida.datosOcultos = ['cerrado', 'pagado'].includes(t.estado); return salida; }
   const fichas = await q`select f.id, f.nombre, f.edad, f.idioma, f.menor, f.sabe_nadar, f.medico, f.emergencia_nombre, f.telefono, f.presente, f.bote_id,
       f.apoderado, f.uso_imagen, bo.nombre as bote,
       -- Visitas = salidas distintas en que aparece el mismo documento (sin importar puntos ni guion); una ficha repetida no suma.
@@ -141,7 +147,7 @@ async function turno({ q, yo, query }) {
           and coalesce(f.documento, '') <> '' and x.id <= f.id) as visitas
     from fichas f left join reservas r on r.id = f.reserva_id left join botes bo on bo.id = f.bote_id
     where coalesce(f.bajada_id, r.bajada_id) = ${t.bajada_id} order by f.id`;
-  const cond = f => f.medico && !/^(ninguna?|none|no|n\/a|-)$/i.test(f.medico.trim());
+  const cond = f => tieneCondicion(f.medico);
   salida.totalPax = fichas.length;
   if (t.funcion === 'guia') salida.pasajeros = fichas.filter(f => f.bote_id === t.bote_id);
   else if (t.funcion === 'seguridad') {
@@ -368,13 +374,14 @@ async function equipoCrear({ q, yo, b, req }) {
   const [c] = await q`insert into cuentas (tipo, usuario, nombre, correo, telefono, pass_hash, funciones, verificada)
     values (${tipo}, ${usuario}, ${nombre}, ${correo || null}, ${tel || null}, ${hashClave(clave)}, ${tipo === 'trabajador' ? b.funciones : []}::text[], false) returning id`;
   const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
-  const correoEnviado = correo ? await sendMail({ to: correo, replyTo: process.env.ADMIN_EMAIL || 'maiporiveradventure@gmail.com',
+  // El correo tiene un tope de tiempo: la clave temporal solo se muestra en esta respuesta y no debe perderse si el SMTP tarda.
+  const correoEnviado = correo ? await conTope(sendMail({ to: correo, replyTo: process.env.ADMIN_EMAIL || 'maiporiveradventure@gmail.com',
     subject: 'Tu acceso a la app de Maipo River Adventure',
     html: emailShell(`<h2 style="margin:8px 0">Hola ${esc(nombre.split(' ')[0])}, ya tienes acceso</h2>
       <p>Entra desde tu celular y agrégala a la pantalla de inicio:</p>
       <p style="margin:16px 0"><a href="${base}/app" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">Abrir la app</a></p>
       <p>Usuario: <b>${esc(usuario)}</b><br>Contraseña temporal: <b>${esc(clave)}</b></p>
-      <p style="font-size:13px;color:#5b6167">Cámbiala en tu perfil la primera vez que entres.</p>`) }) : false;
+      <p style="font-size:13px;color:#5b6167">Cámbiala en tu perfil la primera vez que entres.</p>`) }), 6000) : false;
   return { ok: true, id: c.id, usuario, clave, correoEnviado };
 }
 
@@ -383,6 +390,11 @@ async function equipoEditar({ q, yo, b }) {
   const id = parseInt(b.id, 10);
   const [c] = id > 0 ? await q`select * from cuentas where id = ${id}` : [];
   if (!c) throw new Fallo(404, 'La cuenta no existe.');
+  // Las cuentas de administración de otros socios solo las toca la cuenta maestra; y la clave de la maestra se cambia
+  // únicamente desde su propio perfil. Sin esto, cualquier admin (incluso sin verificar) podría tomar la cuenta maestra.
+  if (c.tipo === 'admin' && c.id !== yo.id && !yo.es_maestra && ('activa' in b || b.reset_clave))
+    throw new Fallo(403, 'Solo la cuenta maestra puede dar de baja o cambiar la clave de otro admin.');
+  if (c.es_maestra && b.reset_clave) throw new Fallo(409, 'La clave de la cuenta maestra se cambia desde su perfil.');
   let clave = null;
   if ('funciones' in b) {
     if (c.tipo !== 'trabajador' || !funcionesOk(b.funciones)) throw new Fallo(400, 'Funciones inválidas.');
@@ -461,7 +473,8 @@ export default async function handler(req, res) {
     if (!esGet && req.method !== 'POST') return res.status(405).json({ error: 'método no permitido' });
     const b = esGet ? {} : await body(req);
     const accion = String(esGet ? req.query.a : b.accion || '');
-    const fn = (esGet ? GET : POST)[accion];
+    const mapa = esGet ? GET : POST;
+    const fn = Object.hasOwn(mapa, accion) ? mapa[accion] : null; // sin esto 'constructor' o 'toString' resolverían a funciones heredadas
     if (!fn) return res.status(400).json({ error: 'acción desconocida' });
     const yo = PUBLICAS.has(accion) ? null : await cuentaDe(req);
     if (!PUBLICAS.has(accion) && !yo) return res.status(401).json({ error: 'sesión no válida' });

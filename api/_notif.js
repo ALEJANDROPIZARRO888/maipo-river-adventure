@@ -26,7 +26,13 @@ export async function notificar(q, destino, { tipo, titulo, cuerpo = null, ruta 
 
 // ---- Avisos que nacen en la web pública (reserva y ficha). Se llaman con import() dinámico y sin await propio: si algo
 // falla (por ejemplo la app aún no está instalada) la reserva o la ficha del cliente no se enteran.
+const MAX_AVISOS_RESERVA = 10; // por admin cada 10 minutos
 export async function reservaNueva({ nombre, personas, fecha, horario, plan }) {
+  // El formulario público es anónimo: si alguien lo inunda, se deja de avisar (las reservas igual quedan en la lista)
+  // para no dejar inservibles los avisos reales ni llenar la base.
+  const [r] = await db()`select count(*)::int as n from avisos where tipo = 'reserva' and creada > now() - interval '10 minutes'
+    and cuenta_id = (select min(id) from cuentas where tipo = 'admin' and activa)`;
+  if (r && r.n >= MAX_AVISOS_RESERVA) return;
   await notificar(db(), 'admins', {
     tipo: 'reserva', titulo: 'Nueva reserva de la web', ruta: 'reservas',
     cuerpo: `${nombre} · ${personas} ${personas === 1 ? 'persona' : 'personas'} · ${dia(fecha)} ${horario} · ${plan}`

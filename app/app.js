@@ -48,7 +48,12 @@ async function pedir(method, url, body, opts = {}) {
 // Lecturas: si no hay señal se muestra lo último que se vio (útil en el río). Solo para leer; guardar exige conexión.
 async function leer(url) {
   const k = 'mra_c_' + (S.cuenta ? S.cuenta.id : 0) + url;
-  try { const j = await pedir('GET', url); store.set(k, JSON.stringify(j)); S.offline = false; return j; }
+  try {
+    const j = await pedir('GET', url); S.offline = false;
+    // Un turno ya cerrado no se guarda en el teléfono: los datos de pasajeros no deben quedar guardados más de lo necesario.
+    if (j.turno && ['cerrado', 'pagado'].includes(j.turno.estado)) store.del(k); else store.set(k, JSON.stringify(j));
+    return j;
+  }
   catch (e) { if (e.sinRed) { const c = store.get(k); if (c) { S.offline = true; return JSON.parse(c); } } throw e; }
 }
 const get = (a, p = {}) => leer('/api/app?' + new URLSearchParams({ a, ...p }));
@@ -86,6 +91,8 @@ function dialogo({ titulo, texto = '', campo = null, si = 'Aceptar', no = 'Cance
       ${campo ? `<label for="dlgv">${esc(campo)}</label><textarea id="dlgv" maxlength="300"></textarea>` : ''}
       <div class="row"><button value="si" type="submit">${esc(si)}</button>${no ? `<button class="ghost" value="no" type="submit">${esc(no)}</button>` : ''}</div></form>`;
     d.onclose = () => res(d.returnValue === 'si' ? (campo ? ($('#dlgv') ? $('#dlgv').value : '') : true) : null);
+    // returnValue se conserva entre aperturas: sin reiniciarlo, cerrar con Escape (o "atrás") repetiría la respuesta del cuadro anterior.
+    d.returnValue = '';
     d.showModal();
   });
 }
@@ -96,16 +103,20 @@ const instalada = () => matchMedia('(display-mode: standalone)').matches || navi
 const puedePush = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const urlB64 = s => { const p = '='.repeat((4 - s.length % 4) % 4), b = (s + p).replace(/-/g, '+').replace(/_/g, '/'); return Uint8Array.from(atob(b), c => c.charCodeAt(0)); };
 const igual = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+// navigator.serviceWorker.ready nunca se resuelve si no hay un service worker activo (registro fallido o en curso).
+// Por eso no se espera más de 3 s: un fallo ahí no debe dejar colgada la app ni impedir cerrar sesión.
+const swListo = (ms = 3000) => Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), ms))]);
 
 // activo · pendiente (falta activarlos) · bloqueado · instalar (iPhone sin instalar) · no-soportado
 async function estadoPush() {
   if (!puedePush()) return esIOS && !instalada() ? 'instalar' : 'no-soportado';
   if (Notification.permission === 'denied') return 'bloqueado';
   if (Notification.permission !== 'granted') return 'pendiente';
-  try { const reg = await navigator.serviceWorker.ready; return (await reg.pushManager.getSubscription()) ? 'activo' : 'pendiente'; } catch { return 'pendiente'; }
+  try { const reg = await swListo(); return reg && (await reg.pushManager.getSubscription()) ? 'activo' : 'pendiente'; } catch { return 'pendiente'; }
 }
 async function suscribirse() {
-  const reg = await navigator.serviceWorker.ready;
+  const reg = await swListo();
+  if (!reg) throw new Error('La app aún no está lista para recibir avisos. Espera unos segundos y vuelve a intentar.');
   const { clave } = await pedir('GET', '/api/app?a=push_clave'), key = urlB64(clave);
   let sub = await reg.pushManager.getSubscription();
   if (sub && !(sub.options && sub.options.applicationServerKey && igual(new Uint8Array(sub.options.applicationServerKey), key))) { await sub.unsubscribe(); sub = null; }
@@ -125,12 +136,12 @@ async function activarAvisos() {
   S.push = await estadoPush(); render();
 }
 async function desactivarAvisos() {
-  try { const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription(); if (sub) { await post('push_baja', { endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
+  try { const reg = await swListo(), sub = reg && await reg.pushManager.getSubscription(); if (sub) { await post('push_baja', { endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch {}
   S.push = await estadoPush(); render();
 }
 // Al cerrar sesión el teléfono se desvincula, para que quien use después este celular no reciba los avisos de otra persona.
 async function desvincularPush() {
-  try { if (puedePush()) { const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription(); if (sub) await post('push_baja', { endpoint: sub.endpoint }); } } catch {}
+  try { if (puedePush()) { const reg = await swListo(1200), sub = reg && await reg.pushManager.getSubscription(); if (sub) await post('push_baja', { endpoint: sub.endpoint }); } } catch {}
 }
 const ocultoAvisos = () => Date.now() - Number(store.get('mra_push_no') || 0) < 3 * 864e5;
 function limpiarBadge() { try { navigator.clearAppBadge && navigator.clearAppBadge(); } catch {} }
@@ -173,7 +184,8 @@ async function cargarVista() {
   } else {
     if (v === 'inicio') {
       const [a, b] = rango(S.periodo);
-      [d.turnos, d.periodo] = await Promise.all([get('turnos', { desde: S.hoy, hasta: sumaDias(S.hoy, 30) }), get('turnos', { desde: a, hasta: b })]);
+      // Desde hace 14 días: así una bajada que se aceptó y no se cerró sigue apareciendo hasta que se cierra.
+      [d.turnos, d.periodo] = await Promise.all([get('turnos', { desde: sumaDias(S.hoy, -14), hasta: sumaDias(S.hoy, 30) }), get('turnos', { desde: a, hasta: b })]);
     } else if (v === 'agenda') d.turnos = await get('turnos', { desde: S.hoy, hasta: sumaDias(S.hoy, 30) });
     else if (v === 'pagos') { const [a, b] = rango(S.periodo); d.periodo = await get('turnos', { desde: a, hasta: b }); }
     else if (v === 'avisos') d.avisos = await get('avisos');
@@ -319,8 +331,8 @@ function salidaArmar(s) {
     ${s.rechazos.map(r => `<div class="warn"><b>${esc(r.nombre)}</b> rechazó ${esc(FN_L[r.funcion])}${r.motivo_rechazo ? ': “' + esc(r.motivo_rechazo) + '”' : ''}. Elige un reemplazo abajo.</div>`).join('')}
     <ul class="pasos" aria-label="Pasos para armar la bajada">${pa.lista.map(x => `<li class="paso ${x.est}"><span class="ico" aria-hidden="true">${ICONO[x.est]}</span><span><b>${esc(x.t)}</b><span class="muted small">${esc(x.d)}</span></span></li>`).join('')}</ul>
     <div class="row">${principal}${secundario}</div>
-    <details${pa.faltaEquipo || pa.sinGuia || (s.rechazos.length && pa.faltaEquipo) ? ' open' : ''}><summary><b>Equipo de esta bajada</b></summary>${s.puestos.map(puesto).join('')}</details>
-    <details${pa.sinBote ? ' open' : ''}><summary><b>Pasajeros y balsas</b></summary>
+    <details data-k="eq-${s.id}"${abierto('eq-' + s.id, pa.faltaEquipo || pa.sinGuia > 0) ? ' open' : ''}><summary><b>Equipo de esta bajada</b></summary>${s.puestos.map(puesto).join('')}</details>
+    <details data-k="px-${s.id}"${abierto('px-' + s.id, pa.sinBote) ? ' open' : ''}><summary><b>Pasajeros y balsas</b></summary>
       ${s.botes.map(b => `<div style="margin:8px 0 2px"><b>${esc(b.nombre)}</b> · ${b.fichas.length} de ${b.capacidad}</div>${b.fichas.length ? b.fichas.map(f => filaFicha(f, s)).join('') : '<div class="muted small">Nadie asignado todavía.</div>'}`).join('')}
       ${s.sinBote.length ? `<div style="margin:10px 0 2px"><b>Sin balsa (${s.sinBote.length})</b></div>${s.sinBote.map(f => filaFicha(f, s)).join('')}` : ''}</details>
   </div>`;
@@ -367,7 +379,7 @@ function vEquipo() {
       <div class="row"><button data-a="copiar" data-t="${esc(`Maipo River — entra a ${location.origin}/app\nUsuario: ${nuevo.usuario}\nClave: ${nuevo.clave}`)}">Copiar</button>
       <a class="tag" style="align-self:center" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`Hola ${nuevo.nombre.split(' ')[0]}! Entra a ${location.origin}/app\nUsuario: ${nuevo.usuario}\nClave: ${nuevo.clave}`)}">Enviar por WhatsApp</a>
       <button class="ghost" data-a="cerrarClave">Listo</button></div></div>` : ''}
-    <details class="card"><summary><b>Agregar colaborador</b></summary>
+    <details class="card" data-k="nuevo-miembro"${abierto('nuevo-miembro', false) ? ' open' : ''}><summary><b>Agregar colaborador</b></summary>
       <form data-f="nuevoMiembro"><label for="nm-nombre">Nombre completo</label><input id="nm-nombre" name="nombre" required autocomplete="off">
         <div class="grid2"><div><label for="nm-tel">Teléfono</label><input id="nm-tel" name="telefono" inputmode="tel"></div><div><label for="nm-mail">Correo</label><input id="nm-mail" name="correo" type="email"></div></div>
         ${S.cuenta.es_maestra ? `<label for="nm-tipo">Tipo de cuenta</label><select id="nm-tipo" name="tipo"><option value="trabajador">Trabajador</option><option value="admin">Administración (socio)</option></select>` : ''}
@@ -412,12 +424,15 @@ function tarjetaTurno(t) {
 }
 function vInicioTrab() {
   const t = S.d.turnos; if (!t) return cargandoTxt;
-  const pend = t.turnos.filter(x => x.estado === 'asignado'), hoy = t.turnos.filter(x => x.fecha === S.hoy && x.estado !== 'asignado' && x.estado !== 'rechazado');
+  const pend = t.turnos.filter(x => x.estado === 'asignado' && x.fecha >= S.hoy), hoy = t.turnos.filter(x => x.fecha === S.hoy && x.estado !== 'asignado' && x.estado !== 'rechazado');
+  const porCerrar = t.turnos.filter(x => x.estado === 'aceptado' && x.fecha < S.hoy);
   const prox = t.turnos.find(x => ['aceptado'].includes(x.estado) && x.fecha > S.hoy);
   const p = S.d.periodo ? S.d.periodo.resumen : { pagar: 0, cerradas: 0, porFuncion: { guia: 0, seguridad: 0, conductor: 0 } };
   // Lo urgente primero: las solicitudes por responder, y recién después los avisos de configuración y los consejos.
   return `<h1>Hola, ${esc(S.cuenta.nombre.split(' ')[0])}</h1>${errBox()}
-    ${pend.map(solicitudHero).join('')}${bannerAvisos()}${consejo()}
+    ${pend.map(solicitudHero).join('')}
+    ${porCerrar.length ? `<h2>Por cerrar</h2><div class="warn">${porCerrar.length === 1 ? 'Esta bajada ya pasó y' : 'Estas bajadas ya pasaron y'} no la${porCerrar.length === 1 ? '' : 's'} has cerrado: mientras no la${porCerrar.length === 1 ? '' : 's'} cierres no cuenta${porCerrar.length === 1 ? '' : 'n'} para tu pago.</div>${porCerrar.map(tarjetaTurno).join('')}` : ''}
+    ${bannerAvisos()}${consejo()}
     <h2>Hoy · ${esc(fdate(S.hoy))}</h2>
     ${hoy.length ? hoy.map(tarjetaTurno).join('') : '<p class="muted">No tienes bajadas hoy.</p>'}
     ${prox ? `<h2>Tu próxima bajada</h2>${tarjetaTurno(prox)}` : ''}
@@ -446,12 +461,13 @@ function vTurno() {
     <h1>${esc(t.horario)} · ${esc(t.etiqueta)}</h1><div class="muted">${esc(fdate(t.fecha))} · ${esc(t.tramoEtiqueta || 'Tramo por confirmar')} · ${esc(t.funcionNombre)} · <b>${clp(t.tarifa)}</b></div>${errBox()}`;
   if (t.estado === 'asignado') return cab + solicitudHero({ ...t, etiqueta: t.etiqueta });
   if (t.estado === 'rechazado') return cab + '<div class="info">Rechazaste esta bajada. El administrador ya fue avisado.</div>';
+  if (d.datosOcultos) return cab + `<div class="card acento"><b>Bajada cerrada</b><div>${plural(t.pax_finales ?? 0, 'pasajero', 'pasajeros')} · ${clp(t.tarifa)} ${t.estado === 'pagado' ? '· pagado' : 'a pagar'}</div></div><div class="info small">Por privacidad, los datos de los pasajeros ya no están disponibles para una bajada cerrada hace varios días.</div>`;
   const equipo = `<h2>Equipo de la bajada</h2><div class="muted">${d.equipo.map(e => `${esc(e.nombre)} — ${esc(FN_C[e.funcion])} ${esc(e.etiqueta)}`).join('<br>') || 'Aún sin equipo confirmado.'}</div>`;
   const checklist = `<h2>Checklist</h2><div class="card">${CHECK[t.funcion].map((x, i) => `<label style="display:flex;gap:10px;align-items:center;margin:6px 0;text-transform:none;letter-spacing:0;font:500 15px Barlow"><input type="checkbox" data-c="ck" data-id="${t.id}" data-i="${i}" style="min-height:auto;width:22px;height:22px"${ck.includes(i) ? ' checked' : ''}${cerrado ? ' disabled' : ''}> ${esc(x)}</label>`).join('')}</div>`;
   let cuerpo = '';
   if (t.funcion === 'guia') {
     const ps = d.pasajeros || [], pres = ps.filter(f => f.presente).length;
-    cuerpo = `<h2>Mis pasajeros · llegaron ${pres} de ${ps.length}</h2>${ps.length ? ps.map(f => `<details class="pax"><summary><input type="checkbox" data-c="checkin" data-fid="${f.id}" style="min-height:auto;width:24px;height:24px;margin-right:8px"${f.presente ? ' checked' : ''}${cerrado ? ' disabled' : ''} aria-label="Llegó ${esc(f.nombre)}"><span><b>${esc(f.nombre)}</b> <span class="muted small">${f.edad ?? '?'} años · ${esc(f.idioma || '')}</span><br><span class="tag">${chipsPax(f) || 'sin condiciones médicas'}</span></span></summary>
+    cuerpo = `<h2>Mis pasajeros · llegaron ${pres} de ${ps.length}</h2>${ps.length ? ps.map(f => `<details class="pax" data-k="pax-${f.id}"${abierto('pax-' + f.id, false) ? ' open' : ''}><summary><input type="checkbox" data-c="checkin" data-fid="${f.id}" style="min-height:auto;width:24px;height:24px;margin-right:8px"${f.presente ? ' checked' : ''}${cerrado ? ' disabled' : ''} aria-label="Llegó ${esc(f.nombre)}"><span><b>${esc(f.nombre)}</b> <span class="muted small">${f.edad ?? '?'} años · ${esc(f.idioma || '')}</span><br><span class="tag">${chipsPax(f) || 'sin condiciones médicas'}</span></span></summary>
       <div class="small" style="padding:4px 0 8px 32px"><div><b>Emergencia:</b> ${esc(f.emergencia_nombre || '-')}</div><div><b>Médico:</b> ${esc(f.medico || '-')}</div>${f.menor && f.apoderado ? `<div><b>Apoderado:</b> ${esc(f.apoderado.nombre)} — ${esc(f.apoderado.rut)}</div>` : ''}<div><b>Contacto:</b> <a href="tel:${esc(f.telefono)}">${esc(f.telefono)}</a></div><div class="muted">${f.visitas > 1 ? f.visitas + 'ª bajada con nosotros · ya conoce la charla' : 'Primera vez · reforzar la charla'} · consentimiento firmado</div></div></details>`).join('')
       : '<p class="muted">El administrador aún no distribuye los pasajeros de esta bajada.</p>'}`;
   } else if (t.funcion === 'seguridad') {
@@ -511,6 +527,22 @@ function vInstalar() {
 }
 
 // ------------------------------------------------------------------ render y navegación
+// La pantalla se redibuja entera cuando llega un cambio en vivo. Para no perder lo que la persona está haciendo:
+//  · los desplegables recuerdan si los abrió o cerró (por su data-k), y solo usan el valor por defecto si nunca los tocó;
+//  · lo que escribió en un campo (por ejemplo "Incidentes") se vuelve a poner tras redibujar.
+S.abiertos = new Map();
+const abierto = (k, porDefecto) => S.abiertos.has(k) ? S.abiertos.get(k) : !!porDefecto;
+document.addEventListener('toggle', e => { const k = e.target.dataset && e.target.dataset.k; if (k) S.abiertos.set(k, e.target.open); }, true);
+function valoresEscritos() {
+  const o = {};
+  document.querySelectorAll('#vista input[id], #vista textarea[id]').forEach(el => {
+    if (['checkbox', 'radio', 'password', 'file'].includes(el.type)) return;
+    if (el.value !== el.defaultValue) o[el.id] = el.value;
+  });
+  return o;
+}
+function restaurarValores(o) { for (const [id, v] of Object.entries(o)) { const el = document.getElementById(id); if (el && el.value === el.defaultValue) el.value = v; } }
+
 function render() {
   const raiz = $('#raiz');
   if (S.cargando && S.token && !S.cuenta) { raiz.innerHTML = '<div class="center"><p class="muted" style="text-align:center" role="status">Cargando…</p></div>'; return; }
@@ -522,8 +554,9 @@ function render() {
   else if (v.startsWith('turno:')) cuerpo = vTurno();
   else if (admin()) cuerpo = ({ inicio: vInicioAdmin, armar: vArmar, reservas: vReservas, equipo: vEquipo, pagos: vPagosAdmin })[v]();
   else cuerpo = ({ inicio: vInicioTrab, agenda: vAgenda, pagos: vPagosTrab })[v]();
-  const y = window.scrollY;
+  const y = window.scrollY, escritos = S.vistaPintada === v ? valoresEscritos() : {}; // solo si sigue en la misma pantalla
   raiz.innerHTML = cabecera() + `<main id="vista">${cuerpo}</main>` + menu();
+  restaurarValores(escritos); S.vistaPintada = v;
   window.scrollTo(0, y);
   document.title = (S.avisos > 0 ? `(${S.avisos}) ` : '') + 'Maipo River — Equipo';
   ponerBadge(S.avisos);
@@ -618,7 +651,7 @@ const A = {
   }
 };
 // Acciones que abren cuadros o piden permisos del navegador no deben quedar bloqueadas por el "ocupado".
-const LIBRES = new Set(['ir', 'armarDia', 'dia', 'periodo', 'copiar', 'cerrarClave', 'cerrarTip', 'ahoraNo', 'activarAvisos', 'abrirAviso']);
+const LIBRES = new Set(['ir', 'armarDia', 'dia', 'periodo', 'copiar', 'cerrarClave', 'cerrarTip', 'ahoraNo', 'activarAvisos', 'abrirAviso', 'salir']);
 document.addEventListener('click', e => {
   const toast = e.target.closest('#toast[data-ruta]'); if (toast) { $('#toast').hidden = true; irRuta(toast.dataset.ruta); return; }
   const el = e.target.closest('[data-a]'); if (!el || !A[el.dataset.a]) return;

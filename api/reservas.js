@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { db, ensureSchema, cors, isAdmin, body, sendMail, planInfo, horaSalida, esc, fmtFecha, clp, emailShell } from './_lib.js';
+import { db, ensureSchema, cors, isAdmin, body, sendMail, planInfo, horaSalida, esc, fmtFecha, clp, emailShell, syncCupos } from './_lib.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
     // ---- Admin: listar reservas con progreso de fichas
     if (req.method === 'GET') {
-      if (!isAdmin(req)) return res.status(401).json({ error: 'no autorizado' });
+      if (!(await isAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
       const rows = await q`
         select r.id, r.creada, r.token, r.nombre, r.telefono, r.correo, r.fecha::text as fecha,
                r.horario, r.personas, r.plan, r.tramo, r.monto, r.comentarios, r.estado, r.origen,
@@ -18,14 +18,44 @@ export default async function handler(req, res) {
       return res.status(200).json({ reservas: rows });
     }
 
-    // ---- Admin: cambiar estado
+    // ---- Admin: cambiar estado (cancelar libera cupos en la planilla; reactivar los vuelve a ocupar)
     if (req.method === 'PATCH') {
-      if (!isAdmin(req)) return res.status(401).json({ error: 'no autorizado' });
+      if (!(await isAdmin(req))) return res.status(401).json({ error: 'no autorizado' });
       const b = await body(req);
       const ok = ['nueva', 'confirmada', 'cancelada', 'completada'];
       if (!b.id || !ok.includes(b.estado)) return res.status(400).json({ error: 'datos inválidos' });
+      const [antes] = await q`select estado, fecha::text as fecha, horario, personas, cupo_sync from reservas where id = ${b.id}`;
+      if (!antes) return res.status(404).json({ error: 'no existe' });
       await q`update reservas set estado = ${b.estado} where id = ${b.id}`;
-      return res.status(200).json({ ok: true });
+      let planilla = null; // null = no aplica
+      if (antes.cupo_sync && (antes.estado === 'cancelada') !== (b.estado === 'cancelada')) {
+        planilla = await syncCupos(antes.fecha, antes.horario, b.estado === 'cancelada' ? -antes.personas : antes.personas);
+      }
+      return res.status(200).json({ ok: true, planilla });
+    }
+
+    // ---- Admin: reserva manual (teléfono, WhatsApp, presencial) — ocupa cupos en la planilla
+    if (req.method === 'POST' && (await isAdmin(req))) {
+      const b = await body(req);
+      const nombre = String(b.nombre || '').trim();
+      const telefono = String(b.telefono || '').trim();
+      const correo = String(b.correo || '').trim();
+      const fecha = String(b.fecha || '').trim();
+      const hora = horaSalida(String(b.horario || '').trim());
+      const personas = parseInt(b.personas, 10);
+      const plan = String(b.plan || '').trim() || 'Reserva manual';
+      if (nombre.length < 2 || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !hora || !(personas >= 1 && personas <= 60)) {
+        return res.status(400).json({ error: 'datos inválidos' });
+      }
+      const monto = parseInt(b.monto, 10) || 0;
+      const token = randomBytes(9).toString('base64url');
+      const [r] = await q`
+        insert into reservas (token, nombre, telefono, correo, fecha, horario, personas, plan, tramo, monto, comentarios, estado, origen, cupo_sync)
+        values (${token}, ${nombre}, ${telefono || '-'}, ${correo || '-'}, ${fecha}, ${hora}, ${personas}, ${plan}, ${String(b.tramo || '').trim() || '-'}, ${monto}, ${String(b.comentarios || '').slice(0, 1000) || null}, 'confirmada', 'manual', true)
+        returning id`;
+      const planilla = await syncCupos(fecha, hora, personas);
+      const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
+      return res.status(201).json({ ok: true, id: r.id, planilla, fichaUrl: `${base}/ficha?r=${token}` });
     }
 
     // ---- Público: crear reserva desde la web
@@ -57,8 +87,8 @@ export default async function handler(req, res) {
     const token = randomBytes(9).toString('base64url');
 
     const [r] = await q`
-      insert into reservas (token, nombre, telefono, correo, fecha, horario, personas, plan, tramo, monto, comentarios)
-      values (${token}, ${nombre}, ${telefono}, ${correo}, ${fecha}, ${hora}, ${personas}, ${plan}, ${tramo}, ${monto}, ${comentarios || null})
+      insert into reservas (token, nombre, telefono, correo, fecha, horario, personas, plan, tramo, monto, comentarios, cupo_sync)
+      values (${token}, ${nombre}, ${telefono}, ${correo}, ${fecha}, ${hora}, ${personas}, ${plan}, ${tramo}, ${monto}, ${comentarios || null}, true)
       returning id`;
 
     const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;

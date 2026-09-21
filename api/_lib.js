@@ -1,0 +1,115 @@
+import { neon } from '@neondatabase/serverless';
+
+let _db;
+export function db() {
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL no configurada');
+  return (_db ||= neon(process.env.DATABASE_URL));
+}
+
+let _ready;
+export function ensureSchema() {
+  return (_ready ||= (async () => {
+    const q = db();
+    await q`create table if not exists reservas (
+      id serial primary key,
+      creada timestamptz not null default now(),
+      token text not null unique,
+      nombre text not null,
+      telefono text not null,
+      correo text not null,
+      fecha date not null,
+      horario text not null,
+      personas int not null,
+      plan text not null,
+      tramo text not null,
+      monto int not null,
+      comentarios text,
+      estado text not null default 'nueva',
+      origen text not null default 'web'
+    )`;
+    await q`create table if not exists fichas (
+      id serial primary key,
+      creada timestamptz not null default now(),
+      reserva_id int not null references reservas(id) on delete cascade,
+      nombre text not null,
+      documento text,
+      nacimiento date,
+      telefono text,
+      correo text,
+      nacionalidad text,
+      idioma text,
+      emergencia_nombre text,
+      emergencia_tel text,
+      medico text,
+      menor boolean not null default false,
+      apoderado jsonb,
+      consentimiento boolean not null,
+      firma text not null,
+      ip text
+    )`;
+  })());
+}
+
+export function cors(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGINS || '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') { res.status(204).end(); return true; }
+  return false;
+}
+
+export function isAdmin(req) {
+  const t = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  return !!process.env.ADMIN_TOKEN && t === process.env.ADMIN_TOKEN;
+}
+
+export function clientIp(req) {
+  return String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || null;
+}
+
+export async function body(req) {
+  if (req.body && typeof req.body === 'object') return req.body;
+  try { return JSON.parse(req.body || '{}'); } catch { return {}; }
+}
+
+// Aviso por correo (Resend). Si no hay clave, no hace nada: nunca rompe la reserva.
+export async function sendMail({ to, subject, html }) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !to) return false;
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: process.env.MAIL_FROM || 'Maipo River Adventure <onboarding@resend.dev>',
+        to: Array.isArray(to) ? to : [to],
+        subject,
+        html
+      })
+    });
+    return r.ok;
+  } catch { return false; }
+}
+
+// Plan -> tramo y monto (CLP). Rafting cobra por persona; los packs de kayak son precio total.
+export function planInfo(plan = '', personas = 1) {
+  const p = plan.toLowerCase();
+  const precio = (plan.match(/\$\s?([\d.]+)/) || [])[1];
+  const valor = precio ? parseInt(precio.replace(/\./g, ''), 10) : 0;
+  if (p.includes('full')) return { tramo: 'Sección completa', monto: valor * personas };
+  if (p.includes('extrema')) return { tramo: 'San Alfonso — Melocotón', monto: valor * personas };
+  if (p.includes('power')) return { tramo: 'Melocotón — San José', monto: valor * personas };
+  if (p.includes('kayak')) return { tramo: 'Clases de kayak', monto: valor };
+  return { tramo: 'Por definir', monto: 0 };
+}
+
+// La web ofrece franjas (Mañana / Medio día / Tarde); la operación usa 11:00, 14:00 y 17:00.
+export function horaSalida(h = '') {
+  const t = h.toLowerCase();
+  if (/11:00|ma[ñn]ana|morning/.test(t)) return '11:00';
+  if (/14:00|medio|midday|noon/.test(t)) return '14:00';
+  if (/17:00|tarde|afternoon/.test(t)) return '17:00';
+  return null;
+}
+
+export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

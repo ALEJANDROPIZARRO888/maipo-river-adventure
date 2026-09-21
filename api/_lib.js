@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import nodemailer from 'nodemailer';
 
 let _db;
 export function db() {
@@ -72,23 +73,64 @@ export async function body(req) {
   try { return JSON.parse(req.body || '{}'); } catch { return {}; }
 }
 
-// Aviso por correo (Resend). Si no hay clave, no hace nada: nunca rompe la reserva.
-export async function sendMail({ to, subject, html }) {
+// ---- Correo -------------------------------------------------------------
+// Prioridad 1: Gmail (contraseña de aplicación). Prioridad 2: Resend.
+// Si no hay ninguna configurada no hace nada: nunca rompe la reserva.
+const GMAIL_USER = () => process.env.GMAIL_USER || 'maiporiveradventure@gmail.com';
+let _tx;
+function transport() {
+  const pass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+  if (!pass) return null;
+  return (_tx ||= nodemailer.createTransport({
+    host: 'smtp.gmail.com', port: 465, secure: true,
+    auth: { user: GMAIL_USER(), pass }
+  }));
+}
+
+export async function sendMail({ to, subject, html, replyTo }) {
+  if (!to) return false;
+  const tx = transport();
+  if (tx) {
+    try {
+      await tx.sendMail({ from: `"Maipo River Adventure" <${GMAIL_USER()}>`, to, subject, html, replyTo });
+      return true;
+    } catch (e) { console.error('smtp error', e && e.message); return false; }
+  }
   const key = process.env.RESEND_API_KEY;
-  if (!key || !to) return false;
+  if (!key) return false;
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from: process.env.MAIL_FROM || 'Maipo River Adventure <onboarding@resend.dev>',
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html
+        to: Array.isArray(to) ? to : [to], subject, html, reply_to: replyTo
       })
     });
     return r.ok;
   } catch { return false; }
+}
+
+// Fecha legible ("jueves, 31 de diciembre de 2026") a partir de 'YYYY-MM-DD' o ISO.
+export function fmtFecha(f, lang = 'es') {
+  const s = String(f || '').slice(0, 10);
+  const d = new Date(s + 'T12:00:00Z');
+  if (isNaN(d)) return s;
+  return new Intl.DateTimeFormat(lang === 'en' ? 'en-GB' : 'es-CL', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
+  }).format(d);
+}
+
+export const clp = n => '$' + Number(n || 0).toLocaleString('es-CL');
+
+// Marco simple y compatible con clientes de correo.
+export function emailShell(inner) {
+  return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f2f2f3;padding:20px">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #c9ccd0;padding:22px;color:#1d1f20;line-height:1.5">
+    <div style="font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2f5478;font-size:13px">Maipo River Adventure</div>
+    ${inner}
+  </div>
+</div>`;
 }
 
 // Plan -> tramo y monto (CLP). Rafting cobra por persona; los packs de kayak son precio total.

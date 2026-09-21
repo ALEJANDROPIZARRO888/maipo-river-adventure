@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { db, ensureSchema, cors, isAdmin, body, sendMail, planInfo, horaSalida, esc } from './_lib.js';
+import { db, ensureSchema, cors, isAdmin, body, sendMail, planInfo, horaSalida, esc, fmtFecha, clp, emailShell } from './_lib.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -11,7 +11,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       if (!isAdmin(req)) return res.status(401).json({ error: 'no autorizado' });
       const rows = await q`
-        select r.*, (select count(*)::int from fichas f where f.reserva_id = r.id) as fichas
+        select r.id, r.creada, r.token, r.nombre, r.telefono, r.correo, r.fecha::text as fecha,
+               r.horario, r.personas, r.plan, r.tramo, r.monto, r.comentarios, r.estado, r.origen,
+               (select count(*)::int from fichas f where f.reserva_id = r.id) as fichas
         from reservas r order by r.fecha asc, r.horario asc, r.id asc`;
       return res.status(200).json({ reservas: rows });
     }
@@ -63,22 +65,38 @@ export default async function handler(req, res) {
     const fichaUrl = `${base}/ficha?r=${token}`;
 
     // Avisos: no bloquean la respuesta si fallan
+    const nombreH = esc(nombre), planH = esc(plan);
+    const resumenEs = `<p style="margin:14px 0 4px"><b>${fmtFecha(fecha, 'es')}</b> · ${esc(hora)} hrs<br>${personas} ${personas === 1 ? 'persona' : 'personas'} · ${planH}</p>`;
+    const resumenEn = `<p style="margin:14px 0 4px"><b>${fmtFecha(fecha, 'en')}</b> · ${esc(hora)}<br>${personas} ${personas === 1 ? 'person' : 'people'} · ${planH}</p>`;
+    const btn = (href, txt) => `<p style="margin:16px 0"><a href="${href}" style="background:#5980a6;color:#fff;text-decoration:none;padding:12px 18px;display:inline-block;font-weight:700">${txt}</a></p>`;
+
     await Promise.allSettled([
       sendMail({
         to: process.env.ADMIN_EMAIL || 'maiporiveradventure@gmail.com',
+        replyTo: correo,
         subject: `Nueva reserva #${r.id} — ${nombre} (${fecha} ${hora})`,
-        html: `<h2>Nueva reserva desde la web</h2>
-          <p><b>${esc(nombre)}</b> · ${esc(telefono)} · ${esc(correo)}</p>
-          <p>${esc(fecha)} a las ${esc(hora)} · ${personas} persona(s)<br>${esc(plan)}<br>Monto estimado: $${monto.toLocaleString('es-CL')}</p>
-          <p>Comentarios: ${esc(comentarios) || '-'}</p>
-          <p>Link de ficha para los pasajeros: <a href="${fichaUrl}">${fichaUrl}</a></p>`
+        html: emailShell(`<h2 style="margin:8px 0">Nueva reserva desde la web</h2>
+          <p style="margin:0"><b>${nombreH}</b><br>${esc(telefono)} · ${esc(correo)}</p>
+          ${resumenEs}
+          <p style="margin:4px 0">Monto estimado: <b>${clp(monto)}</b></p>
+          <p style="margin:4px 0;color:#5b6167">Comentarios: ${esc(comentarios) || '-'}</p>
+          ${btn(`${base}/admin`, 'Abrir panel de reservas')}
+          <p style="font-size:13px;color:#5b6167">Link de ficha para los pasajeros:<br><a href="${fichaUrl}">${fichaUrl}</a></p>`)
       }),
       sendMail({
         to: correo,
-        subject: 'Recibimos tu reserva — Maipo River Adventure',
-        html: `<p>Hola ${esc(nombre)}, recibimos tu solicitud para el ${esc(fecha)} a las ${esc(hora)} (${personas} persona(s)).</p>
-          <p>Para agilizar el día, cada pasajero debe completar su ficha de seguridad aquí:<br><a href="${fichaUrl}">${fichaUrl}</a></p>
-          <p>Te confirmaremos por WhatsApp. / We'll confirm via WhatsApp.</p>`
+        replyTo: process.env.ADMIN_EMAIL || 'maiporiveradventure@gmail.com',
+        subject: 'Recibimos tu reserva / We received your booking — Maipo River Adventure',
+        html: emailShell(`<h2 style="margin:8px 0">Hola ${nombreH}, recibimos tu solicitud</h2>
+          ${resumenEs}
+          <p>Te confirmaremos por WhatsApp. Para agilizar el día, <b>cada pasajero</b> debe completar su ficha de seguridad:</p>
+          ${btn(fichaUrl, 'Completar ficha de seguridad')}
+          <hr style="border:0;border-top:1px solid #c9ccd0;margin:20px 0">
+          <h2 style="margin:8px 0">Hi ${nombreH}, we received your request</h2>
+          ${resumenEn}
+          <p>We will confirm via WhatsApp. To speed things up on the day, <b>every passenger</b> must fill in the safety form:</p>
+          ${btn(fichaUrl, 'Fill in the safety form')}
+          <p style="font-size:13px;color:#5b6167">WhatsApp: <a href="https://wa.me/56976437931">+56 9 7643 7931</a></p>`)
       })
     ]);
 

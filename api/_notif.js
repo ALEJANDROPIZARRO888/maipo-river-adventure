@@ -44,3 +44,12 @@ export async function fichasCompletas({ titular, total, personas, fecha, horario
     cuerpo: `Ya llenaron su ficha ${total} de ${personas} · ${dia(fecha)} ${horario}`
   });
 }
+// El navegador del cliente no pudo restar el cupo en la planilla (bloqueador, red, script caído) y el servidor tampoco
+// pudo hacerlo de respaldo (SHEET_SYNC_KEY sin configurar, o el script la rechazó): la web puede seguir mostrando cupo
+// donde ya no queda. Es el único aviso que no tiene límite de frecuencia: cada vez que pasa hay que corregir la planilla a mano.
+export async function cupoSinSincronizar({ nombre, personas, fecha, horario, origen }) {
+  await notificar(db(), 'admins', {
+    tipo: 'cupo_error', titulo: '⚠️ Cupo no descontado en la planilla', ruta: 'reservas',
+    cuerpo: `${nombre} · ${personas} ${personas === 1 ? 'persona' : 'personas'} · ${dia(fecha)} ${horario} (${origen}). Revisa y ajusta el cupo a mano.`
+  });
+}

@@ -101,7 +101,10 @@ ok('reservas/bajadas: sesión admin y clave del panel valen; sesión de trabajad
 
 console.log('== 6. Tiempo real: el contador sube con lo que llega desde la web pública');
 const r0 = await rev();
-const reservar = o => call(H.reservas, { method: 'POST', body: { telefono: '+56911111111', correo: 'x@y.cl', ...o } });
+// cupoWeb: true simula que el navegador ya restó el cupo en la planilla (el caso normal, sin el bug de sincronización
+// que cubre test/e2e/cupos.test.mjs); así este archivo prueba las notificaciones en general sin el aviso adicional
+// de "cupo no sincronizado" (aquí no hay SHEET_SYNC_KEY configurada, así que sin este flag el servidor lo dispararía).
+const reservar = o => call(H.reservas, { method: 'POST', body: { telefono: '+56911111111', correo: 'x@y.cl', cupoWeb: true, ...o } });
 const RA = await reservar({ nombre: 'Ana Pérez', fecha: '2026-12-05', horario: '11:00', personas: 4, plan: 'Rafting Extrema $45.000' });
 assert.equal(RA.status, 201);
 const r1 = await rev(); assert.ok(r1 > r0, 'una reserva de la web sube el contador');

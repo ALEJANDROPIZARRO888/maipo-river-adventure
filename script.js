@@ -222,18 +222,22 @@
   }
 
   // Guarda la reserva en el backend propio (panel admin + ficha QR). Nunca bloquea la reserva.
-  function postApi() {
+  // cupoWeb: si este navegador ya restó el cupo en la planilla (ver reservarCupo). El servidor solo intenta restarlo
+  // de nuevo si aquí llega false/indefinido, así nunca se descuenta dos veces por la misma reserva.
+  function postApi(cupoWeb) {
     try {
+      var d = fields();
+      d.cupoWeb = cupoWeb === true;
       fetch('/api/reservas', {
         method: 'POST', keepalive: true,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fields())
+        body: JSON.stringify(d)
       }).catch(function () {});
     } catch (e) {}
   }
 
-  function postEmail() {
-    postApi();
+  function postEmail(cupoWeb) {
+    postApi(cupoWeb);
     var d = fields();
     return fetch('https://formsubmit.co/ajax/' + encodeURIComponent(EMAIL), {
       method: 'POST',
@@ -261,6 +265,11 @@
     if (failedMsg) failedMsg.style.display = 'none';
     if (noCupoMsg) noCupoMsg.style.display = 'block';
   }
+  // Resta el cupo directo en la planilla desde el navegador (rápido, y es lo único que valida "sin cupo" antes de
+  // enviar). Devuelve { permite, restado }: permite=false SOLO cuando el script confirmó que ya no hay cupo (bloquea
+  // la reserva); si la petición falla por cualquier otro motivo (bloqueador de anuncios, red, script caído, CORS) se
+  // deja permite=true y restado=false, para no impedir una reserva legítima — el servidor resta como respaldo
+  // (ver postApi/cupoWeb) para que la web nunca siga mostrando cupo donde ya no queda.
   function reservarCupo(fecha, horario, personas) {
     return fetch(CUPOS_API, {
       method: 'POST',
@@ -272,24 +281,31 @@
         if (res && res.error === 'sin_cupo') {
           showSinCupo();
           actualizarDisponibilidad(fecha);
-          return false;
+          return { permite: false, restado: false };
         }
-        return true;
+        return { permite: true, restado: true };
       })
-      .catch(function () { return true; });
+      .catch(function () { return { permite: true, restado: false }; });
+  }
+
+  // Único camino para confirmar cupo y enviar la reserva; lo usan tanto el botón principal (WhatsApp) como el
+  // alterno (por correo). Antes, el botón alterno llamaba a postEmail() directo, sin pasar por reservarCupo(): toda
+  // reserva hecha por ahí nunca restaba el cupo en la planilla, y la web seguía mostrando el horario disponible.
+  function confirmarCupo() {
+    if (!valid()) return Promise.resolve(null);
+    var d = fields();
+    if (noCupoMsg) noCupoMsg.style.display = 'none';
+    return reservarCupo(d.fecha, d.horario, d.personas).then(function (r) { return r.permite ? r : null; });
   }
 
   if (reservaForm) {
     reservaForm.addEventListener('submit', function (e) {
       e.preventDefault();
-      if (!valid()) return;
-      var d = fields();
-      if (noCupoMsg) noCupoMsg.style.display = 'none';
-      reservarCupo(d.fecha, d.horario, d.personas).then(function (ok) {
-        if (!ok) return;
+      confirmarCupo().then(function (r) {
+        if (!r) return;
         window.open('https://wa.me/' + WA + '?text=' + encodeURIComponent(buildText()), '_blank');
         showSent();
-        postEmail().catch(function () {});
+        postEmail(r.restado).catch(function () {});
       });
     });
   }
@@ -297,21 +313,24 @@
   if (emailBtn) {
     var sending = false;
     emailBtn.addEventListener('click', function () {
-      if (!valid() || sending) return;
+      if (sending || !valid()) return;
       sending = true;
       failedMsg && (failedMsg.style.display = 'none');
       var esOn = !page || page.dataset.lang !== 'en';
       if (emailLabel) emailLabel.textContent = esOn ? 'Enviando…' : 'Sending…';
-      postEmail().then(function () {
+      var volver = function () {
         sending = false;
-        if (emailLabel) emailLabel.textContent = esOn ? 'Enviado ✓' : 'Sent ✓';
-        showSent();
+        if (emailLabel) { var e2 = !page || page.dataset.lang !== 'en'; emailLabel.textContent = e2 ? 'Enviar por correo' : 'Send by email'; }
+      };
+      confirmarCupo().then(function (r) {
+        if (!r) { volver(); return; }
+        return postEmail(r.restado).then(function () {
+          sending = false;
+          if (emailLabel) emailLabel.textContent = esOn ? 'Enviado ✓' : 'Sent ✓';
+          showSent();
+        });
       }).catch(function () {
-        sending = false;
-        if (emailLabel) {
-          var esOn2 = !page || page.dataset.lang !== 'en';
-          emailLabel.textContent = esOn2 ? 'Enviar por correo' : 'Send by email';
-        }
+        volver();
         showFailed();
       });
     });

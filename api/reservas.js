@@ -75,11 +75,15 @@ export default async function handler(req, res) {
       }
       const monto = parseInt(b.monto, 10) || 0;
       const token = randomBytes(9).toString('base64url');
+      // syncCupos ANTES del insert: cupo_sync debe reflejar si la planilla realmente quedó al día, nunca "true" a ciegas.
+      // Si queda en false (SHEET_SYNC_KEY sin configurar, o el script la rechazó), una futura cancelación no restará
+      // un cupo que nunca llegó a sumarse, y el admin recibe un aviso para corregir la planilla a mano.
+      const planilla = await syncCupos(fecha, hora, personas);
       const [r] = await q`
         insert into reservas (token, nombre, telefono, correo, fecha, horario, personas, plan, tramo, monto, comentarios, estado, origen, cupo_sync)
-        values (${token}, ${nombre}, ${telefono || '-'}, ${correo || '-'}, ${fecha}, ${hora}, ${personas}, ${plan}, ${String(b.tramo || '').trim() || '-'}, ${monto}, ${String(b.comentarios || '').slice(0, 1000) || null}, 'confirmada', 'manual', true)
+        values (${token}, ${nombre}, ${telefono || '-'}, ${correo || '-'}, ${fecha}, ${hora}, ${personas}, ${plan}, ${String(b.tramo || '').trim() || '-'}, ${monto}, ${String(b.comentarios || '').slice(0, 1000) || null}, 'confirmada', 'manual', ${planilla})
         returning id`;
-      const planilla = await syncCupos(fecha, hora, personas);
+      if (!planilla) import('./_notif.js').then(m => m.cupoSinSincronizar({ nombre, personas, fecha, horario: hora, origen: 'reserva manual' })).catch(() => {});
       const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
       const fichaUrl = `${base}/fichapasajero?r=${token}`;
 
@@ -149,10 +153,19 @@ export default async function handler(req, res) {
     const { tramo, monto } = planInfo(plan, personas);
     const token = randomBytes(9).toString('base64url');
 
+    // El navegador ya intentó restar el cupo en la planilla directamente (más rápido, y valida "sin cupo" antes de
+    // enviar). Si no pudo confirmarlo (bloqueador de anuncios, red, script caído — manda cupoWeb=false o lo omite),
+    // el servidor lo intenta de respaldo con la misma vía que usa la reserva manual del admin. Sin este respaldo, la
+    // única escritura dependía del navegador del cliente: cualquier fallo ahí dejaba el cupo sin descontar en la
+    // planilla, aunque la reserva sí quedara guardada — la web seguía mostrando cupo donde ya no quedaba.
+    const cupoWeb = b.cupoWeb === true;
+    const cupoOk = cupoWeb || (await syncCupos(fecha, hora, personas));
+
     const [r] = await q`
       insert into reservas (token, nombre, telefono, correo, fecha, horario, personas, plan, tramo, monto, comentarios, cupo_sync)
-      values (${token}, ${nombre}, ${telefono}, ${correo}, ${fecha}, ${hora}, ${personas}, ${plan}, ${tramo}, ${monto}, ${comentarios || null}, true)
+      values (${token}, ${nombre}, ${telefono}, ${correo}, ${fecha}, ${hora}, ${personas}, ${plan}, ${tramo}, ${monto}, ${comentarios || null}, ${cupoOk})
       returning id`;
+    if (!cupoOk) import('./_notif.js').then(m => m.cupoSinSincronizar({ nombre, personas, fecha, horario: hora, origen: 'reserva web' })).catch(() => {});
 
     const base = process.env.PUBLIC_BASE_URL || `https://${req.headers.host}`;
     const fichaUrl = `${base}/fichapasajero?r=${token}`;
@@ -195,7 +208,7 @@ export default async function handler(req, res) {
       })
     ]);
 
-    return res.status(201).json({ ok: true, id: r.id, fichaUrl });
+    return res.status(201).json({ ok: true, id: r.id, fichaUrl, cupo: cupoOk });
   } catch (e) {
     console.error('reservas error', e);
     return res.status(500).json({ error: 'error interno' });

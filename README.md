@@ -21,6 +21,28 @@ Sitio web (rafting en el Cajón del Maipo) más el backend de operación: reserv
 | `api/_push.js` | Web Push: llaves VAPID (se generan solas), suscripciones de cada teléfono y envío. |
 | `api/_auto.js` | Reglas puras de operación: tarifas, auto-distribución de pasajeros, elección de personal y choques de horario. |
 
+## Cupos: cómo se descuentan (y qué falló antes)
+
+La web muestra la disponibilidad leyendo la planilla de Google (Apps Script), no Postgres. El navegador del cliente
+resta el cupo ahí directamente al reservar (`reservarCupo()` en `script.js`) porque es lo único que puede confirmar
+"sin cupo" antes de enviar. Eso es fràgil por diseño: cualquier fallo en el navegador (bloqueador de anuncios, mala
+señal, el script de Google lento o caído) impedía la resta sin que nadie se enterara, y la web seguía mostrando cupo
+donde ya no quedaba — bug reportado en producción; el botón alterno "Enviar por correo" ni siquiera lo intentaba.
+
+Ahora hay dos capas:
+1. **Navegador** (rápido, con UX inmediata): intenta restar y avisa "sin cupo" si el script lo confirma. Cualquier
+   otro fallo ya no se trata como éxito silencioso: se marca `cupoWeb: false` y se sigue adelante (no bloquea una
+   reserva legítima por un problema de red del cliente).
+2. **Servidor** (respaldo confiable, mismo mecanismo que ya usaban las reservas manuales del admin — `syncCupos()` en
+   `_lib.js`, requiere `SHEET_SYNC_KEY`): si `cupoWeb` no llegó en `true`, el servidor intenta restar él mismo antes
+   de guardar la reserva. `cupo_sync` en la fila refleja el resultado **real** (antes, la reserva manual del admin
+   guardaba `cupo_sync = true` sin importar si la sincronización funcionaba). Si ninguna de las dos capas lo logra
+   (por ejemplo, `SHEET_SYNC_KEY` sin configurar en Vercel), la reserva se guarda igual y el admin recibe un aviso
+   ("⚠️ Cupo no descontado en la planilla") para corregir la planilla a mano.
+
+**Revisa en Vercel que `SHEET_SYNC_KEY` esté configurada** y coincida con la `SYNC_KEY` del Apps Script: sin ella, el
+respaldo del servidor no puede actuar y solo queda la resta del navegador (la capa frágil).
+
 ## Salidas (bajadas)
 
 Una salida es un horario concreto (fecha + 11:00 / 14:00 / 17:00) con capacidad de **14** personas, igual que la planilla de cupos. Se crean solas al abrir un día en la pestaña **Salidas**: cada fecha y horario con reservas de rafting activas genera su salida y enlaza esas reservas. Las clases de kayak y las reservas canceladas no cuentan.
@@ -51,7 +73,7 @@ Una sola app con dos áreas según el tipo de cuenta. Se instala desde el navega
 `npm install` y luego `npm test`. Corre en unos 25 segundos y no toca ninguna base real:
 
 - `test/*.test.js`: funciones puras (tarifas, reparto en balsas, elección de personal, choques de horario, validación de suscripciones push).
-- `test/e2e/*.test.mjs`: los handlers reales de la API sobre PostgreSQL en memoria ([PGlite](https://pglite.dev), dependencia de desarrollo). Cubren salidas y fichas, la app completa (cuentas, sesiones, armado, publicar, turnos, pagos, tiempo real, avisos push con un emisor simulado) y las regresiones de seguridad. Correrlas antes de publicar a `main`.
+- `test/e2e/*.test.mjs`: los handlers reales de la API sobre PostgreSQL en memoria ([PGlite](https://pglite.dev), dependencia de desarrollo). Cubren salidas y fichas, la app completa (cuentas, sesiones, armado, publicar, turnos, pagos, tiempo real, avisos push con un emisor simulado), las regresiones de seguridad, y la sincronización de cupos (`cupos.test.mjs`, con el Apps Script simulado — nunca sale a la red real). Correrlas antes de publicar a `main`.
 
 ## Variables de entorno
 

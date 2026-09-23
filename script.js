@@ -137,9 +137,13 @@
       if (opt.value) horarioLabelsBase[opt.value] = opt.textContent;
     });
   }
+  // Sin esto, un visitante puede quedarse viendo una disponibilidad vieja que su navegador guardó en caché (Apps
+  // Script no siempre manda cabeceras que impidan cachear un GET): un parámetro que cambia en cada consulta más
+  // 'no-store' garantizan que la respuesta sea siempre fresca, no una guardada de una visita anterior.
+  function sinCache(url) { return url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now(); }
   function actualizarDisponibilidad(fecha) {
     if (!horarioSelect || !fecha) return;
-    fetch(CUPOS_API + '?fecha=' + encodeURIComponent(fecha))
+    fetch(sinCache(CUPOS_API + '?fecha=' + encodeURIComponent(fecha)), { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data || !data.disponibilidad) return;
@@ -159,13 +163,23 @@
     fechaInput.addEventListener('change', function () { actualizarDisponibilidad(fechaInput.value); });
   }
 
-  // ---------- Cupos disponibles hoy ----------
+  // ---------- Cupos disponibles hoy / mañana ----------
+  // La última salida es a las 17:00: pasada esa hora en Chile, "hoy" ya no sirve para reservar, así que el aviso
+  // muestra la disponibilidad de mañana. La hora y la fecha se calculan en la zona horaria de Chile explícitamente
+  // (no la del navegador del visitante), porque las salidas son en el Cajón del Maipo, no donde esté quien mira el sitio.
   var cuposHoyWidget = document.getElementById('cuposHoyWidget');
   var cuposHoyList = document.getElementById('cuposHoyList');
+  var cuposHoyTitulo = document.getElementById('cuposHoyTitulo');
   if (cuposHoyWidget && cuposHoyList) {
-    var th = new Date();
-    var hoyStr = th.getFullYear() + '-' + String(th.getMonth() + 1).padStart(2, '0') + '-' + String(th.getDate()).padStart(2, '0');
-    fetch(CUPOS_API + '?fecha=' + encodeURIComponent(hoyStr))
+    var horaCL = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Santiago', hour: 'numeric', hour12: false }).format(new Date()));
+    var esManana = horaCL >= 17;
+    var diaStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date(Date.now() + (esManana ? 864e5 : 0)));
+    if (cuposHoyTitulo) {
+      cuposHoyTitulo.innerHTML = esManana
+        ? '<span class="lang-es">Cupos disponibles mañana</span><span class="lang-en">Spots available tomorrow</span>'
+        : '<span class="lang-es">Cupos disponibles hoy</span><span class="lang-en">Spots available today</span>';
+    }
+    fetch(sinCache(CUPOS_API + '?fecha=' + encodeURIComponent(diaStr)), { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data || !data.disponibilidad) return;

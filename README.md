@@ -43,6 +43,16 @@ Ahora hay dos capas:
 **Revisa en Vercel que `SHEET_SYNC_KEY` esté configurada** y coincida con la `SYNC_KEY` del Apps Script: sin ella, el
 respaldo del servidor no puede actuar y solo queda la resta del navegador (la capa frágil).
 
+**Caché del navegador:** las dos consultas de disponibilidad (la ventanilla de horarios del formulario, y el aviso
+"Cupos disponibles hoy/mañana") piden explícitamente no usar caché (`cache: 'no-store'` + un parámetro que cambia en
+cada llamada). Sin esto, un visitante puede quedarse viendo una disponibilidad vieja de una visita anterior — así se
+reportó una "sobreventa" que en realidad era el servidor real mostrando `14/14/14` y el navegador del visitante
+sirviendo una respuesta guardada.
+
+**Cupos disponibles hoy / mañana:** pasadas las 17:00 hora de Chile (la última salida del día), el aviso deja de
+mostrar la disponibilidad de hoy y muestra la de mañana — a esa hora ya no sirve de nada saber qué queda para hoy. La
+hora se calcula siempre en `America/Santiago`, no en la zona horaria de quien mira el sitio.
+
 ## Salidas (bajadas)
 
 Una salida es un horario concreto (fecha + 11:00 / 14:00 / 17:00) con capacidad de **14** personas, igual que la planilla de cupos. Se crean solas al abrir un día en la pestaña **Salidas**: cada fecha y horario con reservas de rafting activas genera su salida y enlaza esas reservas. Las clases de kayak y las reservas canceladas no cuentan.
@@ -74,6 +84,7 @@ Una sola app con dos áreas según el tipo de cuenta. Se instala desde el navega
 
 - `test/*.test.js`: funciones puras (tarifas, reparto en balsas, elección de personal, choques de horario, validación de suscripciones push).
 - `test/e2e/*.test.mjs`: los handlers reales de la API sobre PostgreSQL en memoria ([PGlite](https://pglite.dev), dependencia de desarrollo). Cubren salidas y fichas, la app completa (cuentas, sesiones, armado, publicar, turnos, pagos, tiempo real, avisos push con un emisor simulado), las regresiones de seguridad, y la sincronización de cupos (`cupos.test.mjs`, con el Apps Script simulado — nunca sale a la red real). Correrlas antes de publicar a `main`.
+- `test/script-cupos.test.js`: guardas sobre `script.js` (caché de las consultas de disponibilidad, y el cambio hoy/mañana a las 17:00) — no hay entorno de DOM en el repo, así que valida la estructura del código fuente, no lo ejecuta.
 
 ## Variables de entorno
 
